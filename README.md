@@ -26,7 +26,7 @@ Inside: music controls with a live equalizer, a vault for passwords and 2FA code
 
 Make it yours: reorder or hide any tool, move the notch, pick the monitor, hide it automatically in fullscreen apps, or triple-click it to fade it out when it's in the way. All of that in a single executable of a few megabytes, with smooth animations throughout.
 
-## New
+## Added in This Fork
 
 - **Bluetooth** in Overview: paired devices with connect button and battery levels.
 - **Brightness slider** next to the volume slider; follows the active power scheme.
