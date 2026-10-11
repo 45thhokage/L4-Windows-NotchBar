@@ -26,6 +26,15 @@ Inside: music controls with a live equalizer, a vault for passwords and 2FA code
 
 Make it yours: reorder or hide any tool, move the notch, pick the monitor, hide it automatically in fullscreen apps, or triple-click it to fade it out when it's in the way. All of that in a single executable of a few megabytes, with smooth animations throughout.
 
+## New
+
+- **Bluetooth** in Overview: paired devices with connect button and battery levels.
+- **Brightness slider** next to the volume slider; follows the active power scheme.
+- **Lock** and **Sleep** buttons in the Overview header.
+- **Clipboard OCR**: recognize text from any image preview — the text lands on the clipboard and in history. Needs a Windows OCR language pack; no key, no network.
+- **Idle Appearance**: notch length and width sliders with a live miniature preview.
+- **Mouse wheel** over the notch switches tools; **battery and weather** pills show in the closed notch.
+
 > [!TIP]
 > **Missing something?** If you have an idea for a new tool, a feature you'd love to see or something that bugs you, just [open an issue](https://github.com/Linux5Real/L4-Windows-NotchBar/issues/new) and describe it. Every idea is welcome.
 
