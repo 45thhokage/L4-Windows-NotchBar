@@ -5,12 +5,16 @@ import { useSmoothArtwork } from "./artwork";
 import type { NowPlaying } from "../../platform/media";
 import { Equalizer } from "./Equalizer";
 import { LiveEdge } from "../../notch/liveEdges";
+import { BatteryPill, WeatherPill, useBtBattery, useWeatherPill } from "../bluetooth/status";
 
 /**
  * Closed notch while music plays: cover on the left, equalizer on the right,
- * the middle stays empty like a real notch.
+ * the middle stays empty like a real notch. A connected headset's battery and
+ * the weather join the same row instead of replacing anything.
  */
 export function LiveActivity({ np }: { np: NowPlaying }) {
+  const bt = useBtBattery();
+  const wx = useWeatherPill();
   return (
     <motion.div
       className="absolute inset-0 flex items-center justify-between px-[9px]"
@@ -18,10 +22,12 @@ export function LiveActivity({ np }: { np: NowPlaying }) {
       animate={{ opacity: 1, filter: "blur(0px)", transition: content.enter }}
       exit={{ opacity: 0, filter: "blur(4px)", transition: content.exit }}
     >
-      <LiveEdge side="left">
+      <LiveEdge side="left" className="flex items-center gap-2">
         <LiveArtwork artwork={np.artwork} />
+        {bt && <BatteryPill level={bt.level} name={bt.name} />}
       </LiveEdge>
-      <LiveEdge side="right">
+      <LiveEdge side="right" className="flex items-center gap-2">
+        {wx && <WeatherPill icon={wx.icon} text={wx.text} temp={wx.temp} />}
         <Equalizer playing={np.isPlaying} />
       </LiveEdge>
     </motion.div>

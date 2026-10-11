@@ -45,7 +45,12 @@ tauri-plugin-process = "2"
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39"
 windows = { version = "0.62", features = [
+  "Win32_Devices_Bluetooth",
+  "Devices_Bluetooth",
+  "Devices_Bluetooth_GenericAttributeProfile",
   "Foundation",
+  "Graphics_Imaging",
+  "Media_Ocr",
   "Foundation_Collections",
   "Security_Credentials",
   "Security_Cryptography",
@@ -64,6 +69,7 @@ windows = { version = "0.62", features = [
   "Win32_Storage_FileSystem",
   "Win32_System_Diagnostics_Etw",
   "Win32_System_Registry",
+  "Win32_System_Shutdown",
   "Win32_System_Time",
   "Win32_Security_Credentials",
   "Win32_Security_Cryptography",

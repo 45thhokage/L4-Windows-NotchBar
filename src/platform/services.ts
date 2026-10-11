@@ -561,8 +561,14 @@ export interface FocusState {
   kind: "focus" | "dnd";
 }
 
+/** Screen brightness 0..1 (power scheme, internal displays). */
+export interface BrightnessState {
+  level: number;
+}
+
 const mockVolume: VolumeState = { level: 0.42, muted: false };
 const mockFocus: FocusState = { active: false, kind: "focus" };
+const mockBrightness: BrightnessState = { level: 0.8 };
 
 /** One program in the volume mixer (all its audio sessions together). */
 export interface AppVolume {
@@ -629,4 +635,63 @@ export const systemControls = {
     mockFocus.active = active;
     return Promise.resolve({ ...mockFocus });
   },
+  brightness: (): Promise<BrightnessState> =>
+    isNative ? invoke<BrightnessState>("brightness_get") : Promise.resolve({ ...mockBrightness }),
+  setBrightness: (level: number): Promise<BrightnessState> => {
+    if (isNative) return invoke<BrightnessState>("brightness_set", { level });
+    mockBrightness.level = Math.min(1, Math.max(0, level));
+    return Promise.resolve({ ...mockBrightness });
+  },
+  lock: (): Promise<void> => {
+    if (isNative) return invoke("lock_workstation");
+    return Promise.resolve();
+  },
+  sleep: (): Promise<void> => {
+    if (isNative) return invoke("sleep_pc");
+    return Promise.resolve();
+  },
+};
+
+// ---------- Overview: paired Bluetooth devices (src-tauri/src/bluetooth.rs) ----------
+
+export interface BtDevice {
+  name: string;
+  /** 48-bit address; exact through JSON. */
+  address: number;
+  connected: boolean;
+  /** Raw class-of-device; the overview maps it to an icon. */
+  class: number;
+}
+
+export interface BtState {
+  /** False when the machine has no Bluetooth radio. */
+  radio: boolean;
+  devices: BtDevice[];
+}
+
+const mockBt: BtState = {
+  radio: true,
+  devices: [
+    { name: "WH-CH700N", address: 1, connected: false, class: 0x240404 },
+    { name: "OnePlus 8 TMO A2DP SNK", address: 2, connected: false, class: 0x5a020c },
+  ],
+};
+
+/** On demand only: listed when the panel opens (and every few seconds while
+ *  open), never in the background. */
+export const bluetooth = {
+  list: (): Promise<BtState> =>
+    isNative
+      ? invoke<BtState>("bluetooth_list")
+      : Promise.resolve({ radio: mockBt.radio, devices: mockBt.devices.map((d) => ({ ...d })) }),
+  connect: (address: number): Promise<BtState> => {
+    if (isNative) return invoke<BtState>("bluetooth_connect", { address });
+    const dev = mockBt.devices.find((d) => d.address === address);
+    if (dev) dev.connected = true;
+    return Promise.resolve({ radio: mockBt.radio, devices: mockBt.devices.map((d) => ({ ...d })) });
+  },
+  settings: (): Promise<void> => (isNative ? invoke("bluetooth_settings") : Promise.resolve()),
+  /** Battery level (0–100) of a connected device, null when unknown. */
+  battery: (address: number): Promise<number | null> =>
+    isNative ? invoke<number | null>("bluetooth_battery", { address }) : Promise.resolve(null),
 };

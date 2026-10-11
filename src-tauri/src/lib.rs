@@ -1,5 +1,6 @@
 pub mod ai;
 mod audio;
+mod bluetooth;
 mod clipboard;
 mod controls;
 pub mod convert;
@@ -12,6 +13,7 @@ mod hit_test;
 mod media;
 mod memory;
 mod mixer;
+mod ocr;
 mod privacy;
 pub mod secrets;
 mod system;
@@ -85,6 +87,7 @@ pub fn run() {
             clipboard::clipboard_clear,
             clipboard::clipboard_preview,
             clipboard::clipboard_paste_files,
+            clipboard::clipboard_ocr,
             keyboard_focus,
             audio::audio_levels,
             ai::ai_chat,
@@ -113,6 +116,14 @@ pub fn run() {
             tray_focus,
             controls::focus_get,
             controls::focus_set,
+            controls::brightness_get,
+            controls::brightness_set,
+            controls::lock_workstation,
+            controls::sleep_pc,
+            bluetooth::bluetooth_list,
+            bluetooth::bluetooth_connect,
+            bluetooth::bluetooth_battery,
+            bluetooth::bluetooth_settings,
             privacy::privacy_state,
             discord::discord_configure,
             discord::discord_action,

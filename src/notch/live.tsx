@@ -7,7 +7,8 @@ import { LiveDiscord } from "../features/discord/LiveDiscord";
 import { useDiscordCall } from "../features/discord/store";
 import { LiveGaming } from "../features/system/LiveGaming";
 import { useGamingLive } from "../features/system/gaming";
-import { geometry } from "./geometry";
+import { gamingGeometry, liveGeometry } from "./geometry";
+import { settings } from "../settings/store";
 import { LiveSpread, ShapeWidth } from "./liveEdges";
 
 /**
@@ -38,7 +39,9 @@ export function LiveSlot({ id }: { id: string | null }) {
   // Keep the last size while an activity fades out (id is null when the notch opens).
   const last = useRef(id);
   if (id) last.current = id;
-  const box = last.current === "system" ? geometry.gaming : geometry.live;
+  // Activity boxes track the idle size (Idle Appearance) + fixed slot space.
+  const { idleW, idleH } = settings.use().display;
+  const box = last.current === "system" ? gamingGeometry(idleW, idleH) : liveGeometry(idleW, idleH);
   const boxW = useRef(box.w);
   boxW.current = box.w;
   const spread = useTransform(useContext(ShapeWidth), (w) =>

@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { createStore } from "../../lib/store";
 
 /** Is the frontend running in the Tauri app (rather than a regular browser)? */
 export const isNative = "__TAURI_INTERNALS__" in window;
@@ -9,6 +10,14 @@ export const isNative = "__TAURI_INTERNALS__" in window;
 export function setHitRect(rect: { x: number; y: number; w: number; h: number }) {
   if (isNative) void invoke("set_hit_rect", { rect });
 }
+
+/**
+ * Extra hit area unioned into the reported hit rect while set (e.g. the open
+ * Bluetooth panel, which hangs below the notch shape). Viewport CSS px,
+ * null = none. The panel sets and clears it; Notch.tsx's bridge does the union
+ * so the panel counts as notch area for click-through and hover.
+ */
+export const hitExtra = createStore<{ x: number; y: number; w: number; h: number } | null>(null);
 
 /** Keeps the window clickable even when the cursor is outside (e.g. while typing). */
 export function setPinned(pinned: boolean) {

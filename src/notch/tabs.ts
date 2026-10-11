@@ -53,7 +53,7 @@ export interface NotchTab {
 }
 
 export const tabs: NotchTab[] = [
-  { id: "overview", label: "Übersicht", icon: SquaresFour, size: { w: 520, h: 252 }, View: OverviewView },
+  { id: "overview", label: "Übersicht", icon: SquaresFour, size: { w: 520, h: 302 }, View: OverviewView },
   { id: "media", label: "Wiedergabe", icon: MusicNotesSimple, size: { w: 520, h: 232 }, View: NowPlayingView },
   { id: "timer", label: "Timer", icon: Timer, size: { w: 520, h: 192 }, View: TimerView },
   { id: "todos", label: "To-Dos", icon: CheckCircle, size: { w: 520, h: 276 }, View: TodosView },

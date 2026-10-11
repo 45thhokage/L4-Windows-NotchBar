@@ -29,6 +29,8 @@ interface ClipboardSource {
   get(): ClipItem[];
   /** Large image preview (images and copied image files). */
   preview(id: number): Promise<ClipPreview | null>;
+  /** OCR on an image entry: text lands on the clipboard + top of history. */
+  ocr(id: number): Promise<string>;
   subscribe(listener: () => void): () => void;
   copy(id: number): Promise<void>;
   remove(id: number): void;
@@ -55,6 +57,7 @@ function createNative(): ClipboardSource {
     },
     copy: (id) => invoke("clipboard_copy", { id }),
     preview: (id) => invoke<ClipPreview | null>("clipboard_preview", { id }),
+    ocr: (id) => invoke<string>("clipboard_ocr", { id }),
     remove: (id) => void invoke("clipboard_delete", { id }),
     clear: () => void invoke("clipboard_clear"),
     mode: (mode) => void invoke("clipboard_mode", { mode }),
@@ -93,6 +96,11 @@ function createMock(): ClipboardSource {
       const item = items.find((i) => i.id === id);
       const [w, h] = item?.text.split(" × ").map(Number) ?? [];
       return item?.thumbnail && w ? { src: item.thumbnail, width: w, height: h } : null;
+    },
+    async ocr(id) {
+      const text = `Erkannter Beispieltext aus Bild ${id}`;
+      set([{ id: Date.now(), kind: "text", text, thumbnail: null, folders: 0, copiedAt: Date.now() }, ...items]);
+      return text;
     },
     remove: (id) => set(items.filter((i) => i.id !== id)),
     clear: () => set([]),

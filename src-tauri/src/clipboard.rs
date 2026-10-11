@@ -217,6 +217,39 @@ pub async fn clipboard_preview(id: u64, state: State<'_, ClipboardState>) -> Res
     .map_err(|e| e.to_string())
 }
 
+/// OCR on an image entry (screenshot): the recognized text goes on the clipboard
+/// and on top of the history, like a fresh copy. Image files are capped.
+const MAX_OCR_FILE_BYTES: u64 = 20 * 1024 * 1024;
+
+#[tauri::command]
+pub async fn clipboard_ocr(id: u64, app: AppHandle, state: State<'_, ClipboardState>) -> Result<String, String> {
+    // Copy the image bytes and release the lock; OCR takes a second or two.
+    let png = {
+        let entries = state.entries.lock().unwrap();
+        let entry = entries.iter().find(|e| e.id == id).ok_or("Eintrag nicht gefunden")?;
+        match &entry.content {
+            Content::Image(img) => img.png.clone(),
+            Content::Files(files) => {
+                let path = files.iter().find(|p| is_image_file(p)).ok_or("Kein Bild in diesem Eintrag")?;
+                if std::fs::metadata(path).ok().is_some_and(|m| m.len() > MAX_OCR_FILE_BYTES) {
+                    return Err("Bild zu groß für Texterkennung".to_string());
+                }
+                std::fs::read(path).map_err(|_| "Bild nicht lesbar".to_string())?
+            }
+            Content::Text(_) => return Err("Nur für Bilder".to_string()),
+        }
+    };
+    let text = tauri::async_runtime::spawn_blocking(move || crate::ocr::ocr_png(&png)).await.map_err(|e| e.to_string())??;
+    {
+        let mut clipboard = Clipboard::new().map_err(|e| e.to_string())?;
+        clipboard.set_text(text.clone()).map_err(|e| e.to_string())?;
+        *state.last_seq.lock().unwrap() = unsafe { GetClipboardSequenceNumber() };
+        add(&state, Content::Text(text.clone()));
+    }
+    emit(&app, &state);
+    Ok(text)
+}
+
 /// Ctrl+V in Shelf/Converter: files from the clipboard as paths. A copied image
 /// (screenshot) is saved as PNG under Pictures/Notch and that path is returned.
 #[tauri::command]

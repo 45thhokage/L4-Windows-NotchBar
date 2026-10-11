@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   ArrowsOutSimple,
+  ArrowClockwise,
   Check,
   Copy,
   File,
@@ -16,6 +17,7 @@ import {
   Folder,
   ImageSquare,
   LinkSimple,
+  Scan,
   TextAa,
   Trash,
   X,
@@ -28,7 +30,7 @@ import { findTab } from "../../notch/tabs";
 import { clipboard, useClipboard, type ClipItem, type ClipPreview } from "../../platform/clipboard";
 import { Redacted, Segmented } from "../../ui/controls";
 import { usePresenting } from "../privacy/store";
-import { t } from "../../i18n";
+import { t, tBackend } from "../../i18n";
 
 const kindIcon: Record<ClipItem["kind"], Icon> = {
   text: TextAa,
@@ -66,6 +68,9 @@ export function ClipboardView() {
   const [copied, setCopied] = useState<number | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [previewId, setPreviewId] = useState<number | null>(null);
+  const [ocrBusy, setOcrBusy] = useState<number | null>(null);
+  const [ocrDone, setOcrDone] = useState<number | null>(null);
+  const [ocrError, setOcrError] = useState<{ id: number; msg: string } | null>(null);
   const items = filter === "all" ? all : all.filter((i) => i.kind === filter || (filter === "image" && !!i.thumbnail));
   const hidden = usePresenting();
   const preview = usePreview(hidden ? null : previewId);
@@ -93,6 +98,22 @@ export function ClipboardView() {
     setCopied(id);
     scroller.current?.scrollTo({ left: 0, behavior: "smooth" });
     window.setTimeout(() => setCopied((c) => (c === id ? null : c)), 1200);
+  };
+
+  // OCR on the big preview: the text lands on the clipboard + top of history.
+  const ocr = async (id: number) => {
+    if (ocrBusy !== null) return;
+    setOcrBusy(id);
+    setOcrError(null);
+    try {
+      await clipboard.ocr(id);
+      setOcrDone(id);
+      window.setTimeout(() => setOcrDone((d) => (d === id ? null : d)), 1500);
+    } catch (e) {
+      setOcrError({ id, msg: tBackend(typeof e === "string" ? e : t("Texterkennung fehlgeschlagen")) });
+    } finally {
+      setOcrBusy((b) => (b === id ? null : b));
+    }
   };
 
   if (all.length === 0) {
@@ -155,7 +176,16 @@ export function ClipboardView() {
 
       <AnimatePresence>
         {previewId !== null && preview && (
-          <PreviewPane key="preview" preview={preview} onCopy={() => void copy(previewId)} onClose={() => setPreviewId(null)} />
+          <PreviewPane
+            key="preview"
+            preview={preview}
+            onCopy={() => void copy(previewId)}
+            onClose={() => setPreviewId(null)}
+            onOcr={() => void ocr(previewId)}
+            ocrBusy={ocrBusy === previewId}
+            ocrDone={ocrDone === previewId}
+            ocrError={ocrError && ocrError.id === previewId ? ocrError.msg : null}
+          />
         )}
       </AnimatePresence>
     </div>
@@ -204,7 +234,23 @@ function usePreview(id: number | null): LoadedPreview | null {
   return data;
 }
 
-function PreviewPane({ preview, onCopy, onClose }: { preview: LoadedPreview; onCopy: () => void; onClose: () => void }) {
+function PreviewPane({
+  preview,
+  onCopy,
+  onClose,
+  onOcr,
+  ocrBusy,
+  ocrDone,
+  ocrError,
+}: {
+  preview: LoadedPreview;
+  onCopy: () => void;
+  onClose: () => void;
+  onOcr: () => void;
+  ocrBusy: boolean;
+  ocrDone: boolean;
+  ocrError: string | null;
+}) {
   return (
     <motion.div
       className="flex min-h-0 flex-1 flex-col items-center gap-1.5 px-4 pt-2.5"
@@ -232,6 +278,21 @@ function PreviewPane({ preview, onCopy, onClose }: { preview: LoadedPreview; onC
           <ArrowsOutSimple size={11} weight="bold" /> {preview.width} × {preview.height}
         </span>
         <div className="flex gap-0.5">
+          <HeaderButton label={t("Text erkennen")} onClick={onOcr} disabled={ocrBusy}>
+            {ocrBusy ? (
+              <motion.span
+                animate={{ rotate: 360 }}
+                transition={{ duration: 0.9, ease: "linear", repeat: Infinity }}
+                className="flex"
+              >
+                <ArrowClockwise size={13} weight="bold" />
+              </motion.span>
+            ) : ocrDone ? (
+              <Check size={13} weight="bold" className="text-green" />
+            ) : (
+              <Scan size={13} weight="bold" />
+            )}
+          </HeaderButton>
           <HeaderButton label={t("Kopieren")} onClick={onCopy}>
             <Copy size={13} weight="bold" />
           </HeaderButton>
@@ -240,6 +301,7 @@ function PreviewPane({ preview, onCopy, onClose }: { preview: LoadedPreview; onC
           </HeaderButton>
         </div>
       </div>
+      {ocrError && <div className="w-full px-1 text-center text-caption text-red">{ocrError}</div>}
     </motion.div>
   );
 }

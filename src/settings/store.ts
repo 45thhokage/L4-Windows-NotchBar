@@ -38,6 +38,9 @@ export interface Settings {
      * finished timer opens it into the notch until dismissed). Hover and click work as usual.
      */
     idleStyle: "notch" | "line";
+    /** Idle notch size in CSS px (Idle Appearance); the shape morphs there live. */
+    idleW: number;
+    idleH: number;
   };
   /** Gaming mode: FPS + load in the closed notch: off, only in fullscreen, or always. */
   gaming: { mode: "off" | "fullscreen" | "on" };
@@ -95,7 +98,7 @@ const defaults: Settings = {
     },
   },
   weather: null,
-  display: { visibility: "always", monitor: null, offset: 0, focusStyle: "dim", idleStyle: "notch" },
+  display: { visibility: "always", monitor: null, offset: 0, focusStyle: "dim", idleStyle: "notch", idleW: 188, idleH: 30 },
   gaming: { mode: "off" },
   privacyDots: false,
   discord: { clientId: "" },

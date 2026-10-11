@@ -3,12 +3,13 @@ import { AnimatePresence, motion, type Transition } from "motion/react";
 import { GearSix, PushPin, Selection } from "@phosphor-icons/react";
 import { content, springs } from "../design/motion";
 import { useNowPlaying } from "../platform/media";
-import { isNative, keyboardFocus, onNativeBlur, onNativeHover, onShortcut, onTrayOpen, setHitRect, setMemoryLow } from "../platform/native";
+import { isNative, hitExtra, keyboardFocus, onNativeBlur, onNativeHover, onShortcut, onTrayOpen, setHitRect, setMemoryLow } from "../platform/native";
 import { PrivacyDots } from "../features/privacy/PrivacyDots";
 import { FOCUS_CLICKS, focusMode, setFocusMode } from "./focus";
 import { useDragToMove } from "./drag";
 import { LiveSlot, useLiveActivity } from "./live";
-import { DOCK_HEIGHT, HEADER_HEIGHT, geometry, openGeometry, type NotchGeometry } from "./geometry";
+import { LiveStatus } from "../features/bluetooth/status";
+import { DOCK_HEIGHT, HEADER_HEIGHT, gamingGeometry, geometry, idleGeometry, liveGeometry, openGeometry, type NotchGeometry } from "./geometry";
 import { HeaderButton, headerSlot } from "./header";
 import { sizeOverride } from "./size";
 import { NotchShape } from "./NotchShape";
@@ -70,6 +71,14 @@ export function Notch() {
   const size = override?.tabId === tab.id ? override : tab.size;
   // Live activity shown in the closed notch (the idle line only lets the timer alarm through).
   const shownLive = line ? null : idleLine ? (alert ? "timer" : null) : live.id;
+  // Idle size from the settings (Idle Appearance); the shape morphs there live.
+  // Activity boxes track it too, so Length always does something visible.
+  const idle = idleGeometry(displaySettings.idleW, displaySettings.idleH);
+  const geo = {
+    ...idle,
+    live: liveGeometry(displaySettings.idleW, displaySettings.idleH),
+    gaming: gamingGeometry(displaySettings.idleW, displaySettings.idleH),
+  };
   // The idle line never passes through the small notch: line → slightly bigger line on
   // hover → open, and straight back to the line on close.
   const lineIdle = idleLine && !alert;
@@ -78,7 +87,7 @@ export function Notch() {
       ? geometry.line
       : lineIdle && status === "peek"
         ? geometry.linePeek
-        : shapeFor(status, shownLive, size);
+        : shapeFor(status, shownLive, size, geo);
   const tightHit = shape === geometry.line || shape === geometry.linePeek;
   const sticky = useStickyHitZone(status, size.h);
   const transition = useTransitionFor(status, shape);
@@ -99,6 +108,28 @@ export function Notch() {
 
   useNativeBridge(hitRef, onPointerEnter, onPointerLeave);
   const drag = useDragToMove(status);
+
+  // Wheel over empty areas flips through tools (scrollable content, sliders
+  // and text fields keep the gesture). Locked briefly so one flick = one tool.
+  const wheelLock = useRef(0);
+  const onWheel = (e: React.WheelEvent) => {
+    if (e.deltaY === 0 || visible.length < 2) return;
+    const t = e.target as Element | null;
+    if (t instanceof Element) {
+      if (t.closest("input, textarea, select, [role=slider], [role=listbox], [data-wheel-keep]")) return;
+      let el: Element | null = t;
+      while (el && el !== e.currentTarget) {
+        if (el instanceof HTMLElement && el.scrollHeight > el.clientHeight + 4) return;
+        el = el.parentElement;
+      }
+    }
+    const now = Date.now();
+    if (now - wheelLock.current < 300) return;
+    wheelLock.current = now;
+    const i = visible.findIndex((v) => v.id === tab.id);
+    const next = e.deltaY > 0 ? (i < 0 ? visible[0] : visible[(i + 1) % visible.length]) : i <= 0 ? visible[visible.length - 1] : visible[i - 1];
+    if (next && next.id !== tab.id) navigate(next.id);
+  };
 
   // Focus mode on → notch closes, no more hover.
   useEffect(() => {
@@ -172,6 +203,7 @@ export function Notch() {
       >
         <NotchShape geometry={shape} transition={transition} elevated={status === "open"}>
           <LiveSlot id={status === "open" ? null : shownLive} />
+          {status !== "open" && !line && displaySettings.idleStyle === "notch" && shownLive === null && <LiveStatus />}
           {!line && !idleLine && <PrivacyDots />}
 
           <AnimatePresence>
@@ -180,6 +212,7 @@ export function Notch() {
                 key="open"
                 className="absolute top-0 left-1/2 flex flex-col"
                 style={{ width: size.w, height: size.h, marginLeft: -size.w / 2 }}
+                onWheel={onWheel}
                 // No scale here: scaling re-rasterizes the small dock icons at shifting subpixels every frame, which reads as jitter (issue #3).
                 initial={{ opacity: 0, transform: "translateY(-6px)", filter: "blur(6px)" }}
                 animate={{ opacity: 1, transform: "translateY(0px)", filter: "blur(0px)", transition: content.enter }}
@@ -327,13 +360,18 @@ function useStickyHitZone(status: NotchStatus, height: number) {
 /** pb-3 of the hit zone. */
 const HIT_PAD_BOTTOM = 12;
 
-function shapeFor(status: NotchStatus, live: string | null, size: { w: number; h: number }): NotchGeometry {
+function shapeFor(
+  status: NotchStatus,
+  live: string | null,
+  size: { w: number; h: number },
+  geo: { closed: NotchGeometry; peek: NotchGeometry; live: NotchGeometry; gaming: NotchGeometry },
+): NotchGeometry {
   if (status === "open") return openGeometry(size.w, size.h);
-  const base = live === "system" ? geometry.gaming : live ? geometry.live : geometry.closed;
+  const base = live === "system" ? geo.gaming : live ? geo.live : geo.closed;
   if (status === "peek") {
     // Hover nudge relative to the current width so it also fits the live state.
-    const bump = geometry.peek.w - geometry.closed.w;
-    return { ...geometry.peek, w: base.w + bump };
+    const bump = geo.peek.w - geo.closed.w;
+    return { ...geo.peek, w: base.w + bump };
   }
   return base;
 }
@@ -421,13 +459,28 @@ function useNativeBridge(
     if (!isNative || !el) return;
 
     // The shape's size is animated by a spring → ResizeObserver fires every frame.
+    // Portaled panels below the shape (Bluetooth) are fixed-positioned, so they
+    // don't grow this rect by themselves: union the panel's rect while it's set.
     const report = () => {
       const r = el.getBoundingClientRect();
-      setHitRect({ x: r.x, y: r.y, w: r.width, h: r.height });
+      const extra = hitExtra.get();
+      if (!extra) {
+        setHitRect({ x: r.x, y: r.y, w: r.width, h: r.height });
+        return;
+      }
+      const x = Math.min(r.x, extra.x);
+      const y = Math.min(r.y, extra.y);
+      setHitRect({
+        x,
+        y,
+        w: Math.max(r.x + r.width, extra.x + extra.w) - x,
+        h: Math.max(r.y + r.height, extra.y + extra.h) - y,
+      });
     };
     const ro = new ResizeObserver(report);
     ro.observe(el);
     report();
+    const offExtra = hitExtra.subscribe(report);
 
     const offHover = onNativeHover((inside) => (inside ? onEnter() : onLeave()));
     // Text field focused → hold (clickable, no collapse) until focus leaves.
@@ -443,6 +496,7 @@ function useNativeBridge(
 
     return () => {
       ro.disconnect();
+      offExtra();
       offHover();
       el.removeEventListener("focusin", onFocusIn);
       el.removeEventListener("focusout", onFocusOut);

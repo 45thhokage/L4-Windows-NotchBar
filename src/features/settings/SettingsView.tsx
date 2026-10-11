@@ -20,6 +20,7 @@ import {
 import { content, fade, springs } from "../../design/motion";
 import { alarmSounds, playAlarm, stopAlarm, type AlarmDuration } from "../../lib/sound";
 import { nav } from "../../notch/nav";
+import { IDLE_H, IDLE_W } from "../../notch/geometry";
 import { tabs } from "../../notch/tabs";
 import { autostart, display, secrets, unlockFps, type ChangelogEntry, type MonitorInfo, type SecretName, type UsageId } from "../../platform/services";
 import { settings, updateAsk, updateSettings, type AskProvider } from "../../settings/store";
@@ -482,7 +483,7 @@ function Display() {
         </Row>
       )}
       <Row
-        label={t("Geschlossen")}
+        label={t("Idle-Darstellung")}
         hint={
           d.idleStyle === "line"
             ? t("Nur eine dünne Linie – Musik und Co. bleiben verborgen, ein abgelaufener Timer klappt trotzdem auf")
@@ -499,6 +500,42 @@ function Display() {
             { value: "line", label: t("Linie") },
           ]}
         />
+      </Row>
+      <Row label={t("Notch-Größe")} hint={t("Länge und Breite der Notch – auch bei Musik und Co.")}>
+        <div className="flex w-52 flex-col gap-1.5">
+          <div className="flex items-center gap-2">
+            <span className="w-10 shrink-0 text-caption text-label-2">{t("Länge")}</span>
+            <Slider
+              label={t("Länge")}
+              value={d.idleW}
+              min={IDLE_W.min}
+              max={IDLE_W.max}
+              step={IDLE_W.step}
+              onChange={(idleW) => updateSettings((cur) => ({ display: { ...cur.display, idleW } }))}
+            />
+            <span className="tabular w-7 shrink-0 text-right text-caption text-label-2">{d.idleW}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-10 shrink-0 text-caption text-label-2">{t("Breite")}</span>
+            <Slider
+              label={t("Breite")}
+              value={d.idleH}
+              min={IDLE_H.min}
+              max={IDLE_H.max}
+              step={IDLE_H.step}
+              onChange={(idleH) => updateSettings((cur) => ({ display: { ...cur.display, idleH } }))}
+            />
+            <span className="tabular w-7 shrink-0 text-right text-caption text-label-2">{d.idleH}</span>
+          </div>
+          {/* Live miniature: the open panel is fixed-size, so this is where a
+              drag shows immediately (the closed notch follows on Esc). */}
+          <div aria-hidden className="flex h-9 items-center justify-center overflow-hidden rounded-[8px] bg-fill-2">
+            <div
+              className="bg-black"
+              style={{ width: Math.max(8, d.idleW / 4), height: Math.max(4, d.idleH / 4), borderRadius: 999 }}
+            />
+          </div>
+        </div>
       </Row>
       <Row label={t("Fokus-Modus")} hint={t("Klicks gehen durch. 3× schnell auf die Notch klicken schaltet um – oder im Tray-Menü.")}>
         <Switch label={t("Fokus-Modus")} checked={focus} onChange={setFocusMode} />

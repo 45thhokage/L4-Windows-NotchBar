@@ -1,6 +1,9 @@
-//! Overview: system volume and Windows focus.
+//! Overview: system volume, brightness, Windows focus, lock and sleep.
 //!
 //! - Volume: default output device via `IAudioEndpointVolume` (same as the taskbar slider).
+//! - Brightness: power scheme `VIDEO_CURRENT_BRIGHTNESS` (what the Settings slider
+//!   changes on laptops). AC and DC are written together so the slider sticks on
+//!   battery; read follows the current power source.
 //! - Focus: Windows 11 focus session (`FocusSessionManager`, also turns on Do Not Disturb).
 //!   Without that API (older builds), Do Not Disturb is set directly through the WNF state
 //!   `WNF_SHEL_QUIETHOURS_ACTIVE_PROFILE_CHANGED`, which is what the toggle in the
@@ -10,9 +13,16 @@ use std::ffi::c_void;
 
 use serde::Serialize;
 use windows::UI::Shell::FocusSessionManager;
+use windows::Win32::Foundation::{HLOCAL, LocalFree};
 use windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
 use windows::Win32::Media::Audio::{eConsole, eRender, IMMDeviceEnumerator, MMDeviceEnumerator};
 use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED};
+use windows::Win32::System::Power::{
+    GetSystemPowerStatus, PowerGetActiveScheme, PowerReadACValueIndex, PowerReadDCValueIndex, PowerSetActiveScheme,
+    PowerWriteACValueIndex, PowerWriteDCValueIndex, SetSuspendState, SYSTEM_POWER_STATUS,
+};
+use windows::Win32::System::Shutdown::LockWorkStation;
+use windows::core::GUID;
 
 #[derive(Serialize)]
 pub struct Volume {
@@ -129,6 +139,108 @@ pub async fn focus_set(active: bool) -> Result<Focus, String> {
             }
         }
         Ok(read_focus())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// ── Brightness ──────────────────────────────────────────────────────────────
+
+/// `VIDEO_SUBGROUP` / `VIDEO_CURRENT_BRIGHTNESS` from powrprof.h.
+const VIDEO_SUBGROUP: GUID = GUID::from_u128(0x7516B95FF77644648C5306167F40CC99);
+const VIDEO_BRIGHTNESS: GUID = GUID::from_u128(0xADED5E82B90946199949F5D71DAC0BCB);
+
+#[derive(Serialize)]
+pub struct Brightness {
+    /// 0..1
+    level: f32,
+}
+
+/// Active power scheme GUID (freed before returning).
+fn active_scheme() -> Result<GUID, String> {
+    unsafe {
+        let mut scheme: *mut GUID = std::ptr::null_mut();
+        let rc = PowerGetActiveScheme(None, &mut scheme);
+        if rc.0 != 0 || scheme.is_null() {
+            return Err(format!("Energieschema nicht lesbar ({:#x})", rc.0));
+        }
+        let guid = *scheme;
+        let _ = LocalFree(Some(HLOCAL(scheme.cast::<std::ffi::c_void>())));
+        Ok(guid)
+    }
+}
+
+fn on_ac() -> bool {
+    unsafe {
+        let mut status = std::mem::zeroed::<SYSTEM_POWER_STATUS>();
+        GetSystemPowerStatus(&mut status).is_ok() && status.ACLineStatus == 1
+    }
+}
+
+fn read_brightness() -> Result<Brightness, String> {
+    unsafe {
+        let scheme = active_scheme()?;
+        let mut index = 0u32;
+        // DC read returns the raw code; normalize both arms to u32.
+        let code = if on_ac() {
+            PowerReadACValueIndex(None, Some(&scheme), Some(&VIDEO_SUBGROUP), Some(&VIDEO_BRIGHTNESS), &mut index).0
+        } else {
+            PowerReadDCValueIndex(None, Some(&scheme), Some(&VIDEO_SUBGROUP), Some(&VIDEO_BRIGHTNESS), &mut index)
+        };
+        if code != 0 {
+            return Err(format!("Helligkeit nicht lesbar ({code:#x})"));
+        }
+        Ok(Brightness { level: (index as f32 / 100.0).clamp(0.0, 1.0) })
+    }
+}
+
+#[tauri::command]
+pub async fn brightness_get() -> Result<Brightness, String> {
+    tauri::async_runtime::spawn_blocking(read_brightness).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn brightness_set(level: f32) -> Result<Brightness, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let scheme = active_scheme()?;
+        let index = (level.clamp(0.0, 1.0) * 100.0).round() as u32;
+        unsafe {
+            let rc = PowerWriteACValueIndex(None, &scheme, Some(&VIDEO_SUBGROUP), Some(&VIDEO_BRIGHTNESS), index);
+            if rc.0 != 0 {
+                return Err(format!("Helligkeit ließ sich nicht setzen ({:#x})", rc.0));
+            }
+            // DC too, so the slider sticks on battery; failure there is not fatal.
+            let _ = PowerWriteDCValueIndex(None, &scheme, Some(&VIDEO_SUBGROUP), Some(&VIDEO_BRIGHTNESS), index);
+            let rc = PowerSetActiveScheme(None, Some(&scheme));
+            if rc.0 != 0 {
+                return Err(format!("Helligkeit ließ sich nicht übernehmen ({:#x})", rc.0));
+            }
+        }
+        read_brightness()
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// ── Lock / Sleep ────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn lock_workstation() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(|| unsafe { LockWorkStation().map_err(|e| e.message()) })
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn sleep_pc() -> Result<(), String> {
+    // Returns after wake (or when an app vetoes the sleep); unsaved work vetoes,
+    // like sleep from the Start menu.
+    tauri::async_runtime::spawn_blocking(|| unsafe {
+        if SetSuspendState(false, false, false) {
+            Ok(())
+        } else {
+            Err("Energie sparen abgebrochen".to_string())
+        }
     })
     .await
     .map_err(|e| e.to_string())?
