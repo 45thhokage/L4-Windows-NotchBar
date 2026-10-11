@@ -1,5 +1,27 @@
 [
   {
+    "version": "1.7.0",
+    "date": "2026-10-11",
+    "items": [
+      {
+        "de": "Neues Aussehen-Tool: Hintergrund-Effekte für die Notch (Visualisierer, Aurora, Nachthimmel und mehr), Farben, Glas-Material und Kantenleuchten",
+        "en": "New Appearance tool: notch background effects (visualizer, aurora, night sky and more), colours, glass material and edge glow"
+      },
+      {
+        "de": "Bluetooth-Geräte mit Akkustand, Helligkeits-Regler sowie Sperren und Energiesparen in der Übersicht",
+        "en": "Bluetooth devices with battery levels, a brightness slider, plus lock and sleep in the overview"
+      },
+      {
+        "de": "Texterkennung für Bilder aus der Zwischenablage – ganz ohne Cloud",
+        "en": "Text recognition for clipboard images – fully offline"
+      },
+      {
+        "de": "Symbole und Untertitel lassen sich heller stellen, auch auf weißer Notch bleibt alles lesbar",
+        "en": "Icons and subtext can be brightened, everything stays readable on a white notch too"
+      }
+    ]
+  },
+  {
     "version": "1.6.0",
     "date": "2026-10-09",
     "items": [
