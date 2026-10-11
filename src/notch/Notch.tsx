@@ -13,6 +13,7 @@ import { DOCK_HEIGHT, HEADER_HEIGHT, gamingGeometry, geometry, idleGeometry, liv
 import { HeaderButton, headerSlot } from "./header";
 import { sizeOverride } from "./size";
 import { NotchShape } from "./NotchShape";
+import { BackgroundEffects } from "./BackgroundEffects";
 import { drop } from "../platform/drop";
 import { settings } from "../settings/store";
 import { useUnseen } from "../lib/changelog";
@@ -31,7 +32,7 @@ const MEMORY_LOW_AFTER_MS = 20_000;
 export function Notch() {
   const { status, open, close, dismiss, toggle, onPointerEnter, onPointerLeave } = useNotchState();
   const focus = focusMode.use();
-  const { tools: toolSettings, display: displaySettings } = settings.use();
+  const { tools: toolSettings, display: displaySettings, appearance } = settings.use();
   // Focus mode as a line: no live activity, no dots, only the thin strip at the edge.
   const line = focus && displaySettings.focusStyle === "line";
   // Line as the normal closed look: hover and click work as usual, but nothing shows
@@ -89,6 +90,52 @@ export function Notch() {
         ? geometry.linePeek
         : shapeFor(status, shownLive, size, geo);
   const tightHit = shape === geometry.line || shape === geometry.linePeek;
+  // Accent: album colour while it exists, the Accent setting when silent.
+  // Cycle runs on an interval that writes the variable straight to the DOM —
+  // no React re-render; switches, glow and effects all follow automatically.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const cycling = appearance.accent === "cycle";
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el || !cycling) return;
+    let h = Math.floor((Date.now() / 50) % 360);
+    const id = window.setInterval(() => {
+      h = (h + 3) % 360;
+      el.style.setProperty("--appearance-accent", `hsl(${h} 85% 62%)`);
+    }, 100);
+    return () => window.clearInterval(id);
+  }, [cycling]);
+  useEffect(() => {
+    if (!cycling) rootRef.current?.style.removeProperty("--appearance-accent");
+  }, [cycling]);
+
+  const fills = CARD_FILLS[appearance.cards];
+  // Paint for the shape: resting colour closed, material treatment open.
+  const isOpen = status === "open";
+  const chromeBg = isOpen ? appearance.expanded : appearance.resting;
+  // Light background → dark text, dark control fills and a light menu surface.
+  const chromeLight = luminance(chromeBg) > 0.55;
+  const ink = chromeLight ? "0 0 0" : "255 255 255";
+  const tone = {
+    solid: chromeBg,
+    wash: !isOpen
+      ? null
+      : appearance.material === "glass"
+        ? { color: `color-mix(in srgb, ${appearance.expanded} 55%, transparent)`, blur: 18 }
+        : appearance.material === "dark"
+          ? { color: `color-mix(in srgb, ${appearance.expanded} 80%, transparent)`, blur: 10 }
+          : null,
+    glow:
+      appearance.glow === "off"
+        ? null
+        : appearance.glow === "subtle"
+          ? "0 0 26px -4px color-mix(in srgb, var(--appearance-accent) 45%, transparent)"
+          : "0 0 52px -2px color-mix(in srgb, var(--appearance-accent) 65%, transparent)",
+  };
+  // Squared corners: shrink the bottom radius, keep the top ears curved so the
+  // shape still blends into the screen edge.
+  const shaped =
+    appearance.corners === "squared" && !tightHit ? { ...shape, r: Math.max(3, Math.round(shape.r * 0.35)) } : shape;
   const sticky = useStickyHitZone(status, size.h);
   const transition = useTransitionFor(status, shape);
 
@@ -182,9 +229,32 @@ export function Notch() {
 
   return (
     <div
+      ref={rootRef}
       className="pointer-events-none fixed inset-x-0 top-0 z-50 flex justify-center transition-opacity duration-200"
-      // In the browser the notch moves inside the window; natively the whole window moves (display.rs).
-      style={{ ["--accent" as string]: np?.accent, opacity: focus && !line ? 0.5 : 1, transform: isNative ? undefined : `translateX(${drag.offset}px)` }}
+      // Card fills follow the Appearance setting; --accent is the album colour when one
+      // exists (equalizer, music UI), --appearance-accent is the picked Accent (switches, glow).
+      style={{
+        ["--accent" as string]: np?.accent ?? (cycling ? "#ff453a" : appearance.accent),
+        ["--appearance-accent" as string]: cycling ? "#ff453a" : appearance.accent,
+        ["--color-fill-1" as string]: `rgb(${ink} / ${fills[0]})`,
+        ["--color-fill-2" as string]: `rgb(${ink} / ${fills[1]})`,
+        ["--color-fill-3" as string]: `rgb(${ink} / ${fills[2]})`,
+        ["--color-notch" as string]: chromeBg,
+        ["--color-label-3" as string]: `rgb(${ink} / ${boost(chromeLight ? 0.38 : 0.34, appearance.subtext)})`,
+        ["--dock-icon" as string]: `rgb(${ink} / ${boost(0.34, appearance.icons)})`,
+        ["--dock-filter" as string]: `brightness(${Math.min(3, appearance.icons).toFixed(2)})`,
+        ...(chromeLight
+          ? {
+              ["--color-label" as string]: "rgb(0 0 0 / 0.92)",
+              ["--color-label-2" as string]: "rgb(0 0 0 / 0.6)",
+              ["--color-label-4" as string]: "rgb(0 0 0 / 0.2)",
+              ["--color-separator" as string]: "rgb(0 0 0 / 0.08)",
+              ["--color-elevated" as string]: "#f2f2f6",
+            }
+          : null),
+        opacity: focus && !line ? 0.5 : 1,
+        transform: isNative ? undefined : `translateX(${drag.offset}px)`,
+      }}
     >
       {/* Hit zone: bigger than the visible shape (Fitts) and flush with the top edge. */}
       <div
@@ -201,7 +271,11 @@ export function Notch() {
         onPointerLeave={isNative || focus ? undefined : onPointerLeave}
         onClick={onClick}
       >
-        <NotchShape geometry={shape} transition={transition} elevated={status === "open"}>
+        <NotchShape geometry={shaped} transition={transition} elevated={status === "open"} tone={tone}>
+          {/* Closed-notch effect: opt-in, never on the line look. */}
+          {appearance.closedEffect && appearance.effect !== "none" && status !== "open" && !line && !idleLine && (
+            <BackgroundEffects effect={appearance.effect} playing={np?.isPlaying ?? false} radius={shaped.r} />
+          )}
           <LiveSlot id={status === "open" ? null : shownLive} />
           {status !== "open" && !line && displaySettings.idleStyle === "notch" && shownLive === null && <LiveStatus />}
           {!line && !idleLine && <PrivacyDots />}
@@ -218,6 +292,9 @@ export function Notch() {
                 animate={{ opacity: 1, transform: "translateY(0px)", filter: "blur(0px)", transition: content.enter }}
                 exit={{ opacity: 0, transform: "translateY(-4px)", filter: "blur(4px)", transition: content.exit }}
               >
+                {appearance.effect !== "none" && (
+                  <BackgroundEffects effect={appearance.effect} playing={np?.isPlaying ?? false} radius={shaped.r} />
+                )}
                 <Header title={t(tab.label)} onDragStart={drag.onPointerDown} />
                 <div className="relative min-h-0 flex-1 overflow-clip">
                   <AnimatePresence mode="popLayout" initial={false}>
@@ -247,7 +324,7 @@ function Header({ title, onDragStart }: { title: string; onDragStart: (e: React.
   const isPinned = pinned.use();
   return (
     // Empty header space = drag handle.
-    <div data-drag-handle onPointerDown={onDragStart} className="flex shrink-0 items-center justify-between gap-3 pr-3 pl-5" style={{ height: HEADER_HEIGHT + 4 }}>
+    <div data-drag-handle onPointerDown={onDragStart} className="relative flex shrink-0 items-center justify-between gap-3 pr-3 pl-5" style={{ height: HEADER_HEIGHT + 4 }}>
       <div className="relative min-w-0 flex-1">
         <AnimatePresence mode="popLayout" initial={false}>
           <motion.h2
@@ -286,7 +363,7 @@ function Dock({ tabs, activeId }: { tabs: NotchTab[]; activeId: string }) {
   const badge = updateReady || unseen;
 
   return (
-    <div className="flex shrink-0 items-start justify-center gap-0.5 px-4 pt-1" style={{ height: DOCK_HEIGHT }}>
+    <div className="relative flex shrink-0 items-start justify-center gap-0.5 px-4 pt-1" style={{ height: DOCK_HEIGHT }}>
       {tabs.map((tab) => (
         <DockButton key={tab.id} label={t(tab.label)} icon={tab.icon} active={tab.id === activeId} onClick={() => navigate(tab.id)} />
       ))}
@@ -310,7 +387,7 @@ function DockButton(props: { label: string; icon: NotchTab["icon"]; active: bool
       title={props.label}
       onClick={props.onClick}
       className={`pressable relative flex h-8 w-8 items-center justify-center rounded-[10px] ${
-        props.active ? "text-label" : "text-label-3 hover:text-label-2"
+        props.active ? "text-label" : "text-[var(--dock-icon)] hover:text-label-2 [filter:var(--dock-filter)]"
       }`}
     >
       {props.active && <motion.span layoutId="dock-pill" className="absolute inset-0 rounded-[10px] bg-fill-2" transition={springs.snappy} />}
@@ -359,6 +436,26 @@ function useStickyHitZone(status: NotchStatus, height: number) {
 
 /** pb-3 of the hit zone. */
 const HIT_PAD_BOTTOM = 12;
+
+/** Card tiers: Light / Dark (today's look) / Darker — override the fill tokens per subtree. */
+const CARD_FILLS = {
+  light: ["0.10", "0.16", "0.24"],
+  dark: ["0.06", "0.10", "0.16"],
+  darker: ["0.03", "0.06", "0.10"],
+} as const;
+
+/** sRGB relative luminance of a #rrggbb colour (0–1). */
+function luminance(hex: string): number {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** Scale a base alpha by a 1–2 brightness boost, capped so the hierarchy never inverts. */
+function boost(base: number, by: number): string {
+  return Math.min(0.9, base * (Number.isFinite(by) ? by : 1)).toFixed(2);
+}
 
 function shapeFor(
   status: NotchStatus,

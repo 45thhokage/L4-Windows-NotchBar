@@ -52,7 +52,7 @@ export function Segmented<T extends string>(props: {
   );
 }
 
-/** iOS switch. Green like Apple's; the knob slides with a spring. */
+/** iOS switch. On-state follows the picked Appearance accent (green where unset); the knob slides with a spring. */
 export function Switch({
   checked,
   onChange,
@@ -68,7 +68,8 @@ export function Switch({
       aria-checked={checked}
       aria-label={label}
       onClick={() => onChange(!checked)}
-      className={`pressable relative h-[18px] w-[30px] shrink-0 rounded-full transition-colors duration-200 ${checked ? "bg-green" : "bg-fill-3"}`}
+      style={checked ? { backgroundColor: "var(--appearance-accent, #30d158)" } : undefined}
+      className={`pressable relative h-[18px] w-[30px] shrink-0 rounded-full transition-colors duration-200 ${checked ? "" : "bg-fill-3"}`}
     >
       <motion.span
         className="absolute top-[2px] left-[2px] size-[14px] rounded-full bg-white shadow-sm"

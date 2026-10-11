@@ -8,6 +8,12 @@ interface Props {
   transition: Transition;
   /** Shadow only when the notch "floats" over content (open). */
   elevated: boolean;
+  /**
+   * Appearance paint: `solid` colours the ears and the body base, `wash` is the
+   * open-panel treatment (translucent colour + backdrop blur, null = solid),
+   * `glow` an extra accent halo on the shadow (null = off).
+   */
+  tone: { solid: string; wash: { color: string; blur: number } | null; glow: string | null };
   children?: ReactNode;
 }
 
@@ -19,7 +25,7 @@ interface Props {
  * re-render per frame. Animations are interruptible and keep their velocity
  * (important when hovering in and out quickly).
  */
-export function NotchShape({ geometry, transition, elevated, children }: Props) {
+export function NotchShape({ geometry, transition, elevated, tone, children }: Props) {
   const w = useMotionValue(geometry.w);
   const h = useMotionValue(geometry.h);
   const r = useMotionValue(geometry.r);
@@ -58,8 +64,7 @@ export function NotchShape({ geometry, transition, elevated, children }: Props) 
           left: earOffset,
           width: ear,
           height: ear,
-          background:
-            "radial-gradient(circle farthest-side at 0% 100%, transparent calc(100% - 0.75px), var(--color-notch) 100%)",
+          background: `radial-gradient(circle farthest-side at 0% 100%, transparent calc(100% - 0.75px), ${tone.solid} 100%)`,
         }}
       />
       <motion.span
@@ -69,8 +74,7 @@ export function NotchShape({ geometry, transition, elevated, children }: Props) 
           right: earOffset,
           width: ear,
           height: ear,
-          background:
-            "radial-gradient(circle farthest-side at 100% 100%, transparent calc(100% - 0.75px), var(--color-notch) 100%)",
+          background: `radial-gradient(circle farthest-side at 100% 100%, transparent calc(100% - 0.75px), ${tone.solid} 100%)`,
         }}
       />
       <motion.div
@@ -80,13 +84,18 @@ export function NotchShape({ geometry, transition, elevated, children }: Props) 
           opacity: shadow,
           borderBottomLeftRadius: r,
           borderBottomRightRadius: r,
-          boxShadow: "0 18px 40px -10px rgb(0 0 0 / 0.7), 0 4px 12px rgb(0 0 0 / 0.35)",
+          boxShadow: `0 18px 40px -10px rgb(0 0 0 / 0.7), 0 4px 12px rgb(0 0 0 / 0.35)${tone.glow ? `, ${tone.glow}` : ""}`,
         }}
       />
       <motion.div
         // clip instead of hidden: no scroll container, so focus/scrollIntoView can't shift the content.
         className="absolute inset-0 overflow-clip bg-notch"
-        style={{ borderBottomLeftRadius: r, borderBottomRightRadius: r }}
+        style={{
+          borderBottomLeftRadius: r,
+          borderBottomRightRadius: r,
+          background: tone.wash ? tone.wash.color : tone.solid,
+          backdropFilter: tone.wash ? `blur(${tone.wash.blur}px)` : undefined,
+        }}
       >
         <ShapeWidth.Provider value={w}>{children}</ShapeWidth.Provider>
       </motion.div>

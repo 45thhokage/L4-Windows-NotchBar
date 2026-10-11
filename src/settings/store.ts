@@ -59,7 +59,28 @@ export interface Settings {
   presentation: { manual: boolean; auto: boolean };
   /** Check for a new version once a day, anonymously (installs only on click). */
   updates: { auto: boolean };
+  /** Look of the notch: background effect, colours, shape and material. */
+  appearance: {
+    effect: AppearanceEffect;
+    /** Background effect also behind the closed notch (never the line look). */
+    closedEffect: boolean;
+    /** Switches, highlights, effect base and glow when nothing plays. Always a fixed colour. */
+    accent: string;
+    /** Colour of the collapsed notch. */
+    resting: string;
+    /** Panel colour when the material is Solid. */
+    expanded: string;
+    corners: "rounded" | "squared";
+    material: "glass" | "dark" | "solid";
+    cards: "light" | "dark" | "darker";
+    glow: "off" | "subtle" | "strong";
+    /** Brightness multipliers (1–2) for dock icons and dimmed sub text. */
+    icons: number;
+    subtext: number;
+  };
 }
+
+export type AppearanceEffect = "none" | "visualizer" | "ambient" | "waves" | "aurora" | "holographic" | "topographic" | "synthwave" | "nightsky";
 
 /** All tool IDs in default order. Must match `src/notch/tabs.ts`. */
 export const TOOL_IDS = [
@@ -78,6 +99,7 @@ export const TOOL_IDS = [
   "system",
   "discord",
   "vault",
+  "appearance",
 ] as const;
 
 const DEFAULT_OFF = new Set<string>(["system", "discord", "trading", "vault"]);
@@ -107,6 +129,19 @@ const defaults: Settings = {
   units: regionUnits(),
   presentation: { manual: false, auto: true },
   updates: { auto: true },
+  appearance: {
+    effect: "none",
+    closedEffect: false,
+    accent: "#ff453a",
+    resting: "#000000",
+    expanded: "#000000",
+    corners: "rounded",
+    material: "solid",
+    cards: "dark",
+    glow: "off",
+    icons: 1,
+    subtext: 1,
+  },
 };
 
 /** °F and 12 h where the Windows region uses them (US & co.), otherwise °C and 24 h. */
@@ -162,6 +197,7 @@ settings.set((s) => {
     units: { ...defaults.units, ...s.units },
     presentation: { ...defaults.presentation, ...s.presentation },
     updates: { ...defaults.updates, ...s.updates },
+    appearance: { ...defaults.appearance, ...s.appearance },
     ask: migrateAsk(s.ask),
   };
 });
