@@ -157,7 +157,9 @@ export function Notch() {
   const drag = useDragToMove(status);
 
   // Wheel over empty areas flips through tools (scrollable content, sliders
-  // and text fields keep the gesture). Locked briefly so one flick = one tool.
+  // and text fields keep the gesture). Horizontal scrollers count too: the
+  // clipboard card row scrolls sideways on vertical wheel, and without this
+  // the gesture would flip tools instead. Locked briefly so one flick = one tool.
   const wheelLock = useRef(0);
   const onWheel = (e: React.WheelEvent) => {
     if (e.deltaY === 0 || visible.length < 2) return;
@@ -166,7 +168,7 @@ export function Notch() {
       if (t.closest("input, textarea, select, [role=slider], [role=listbox], [data-wheel-keep]")) return;
       let el: Element | null = t;
       while (el && el !== e.currentTarget) {
-        if (el instanceof HTMLElement && el.scrollHeight > el.clientHeight + 4) return;
+        if (el instanceof HTMLElement && (el.scrollHeight > el.clientHeight + 4 || el.scrollWidth > el.clientWidth + 4)) return;
         el = el.parentElement;
       }
     }

@@ -64,6 +64,7 @@ const backendPatterns: [RegExp, string][] = [
   [/^Kein Bild in diesem Eintrag$/, "No image in this entry"],
   [/^Nur für Bilder$/, "Images only"],
   [/^Bild zu groß für Texterkennung$/, "Image too large for text recognition"],
+  [/^OCR-Sprachpaket fehlt für (.*)$/, "OCR language pack missing for $1"],
   [/^Kein Text erkannt$/, "No text recognized"],
   [/^Texterkennung nicht verfügbar \(OCR-Sprachpaket fehlt\)$/, "Text recognition unavailable (OCR language pack missing)"],
   [/^Energieschema nicht lesbar \((.*)\)$/, "Cannot read power scheme ($1)"],

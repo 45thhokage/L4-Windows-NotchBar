@@ -239,7 +239,14 @@ pub async fn clipboard_ocr(id: u64, app: AppHandle, state: State<'_, ClipboardSt
             Content::Text(_) => return Err("Nur für Bilder".to_string()),
         }
     };
-    let text = tauri::async_runtime::spawn_blocking(move || crate::ocr::ocr_png(&png)).await.map_err(|e| e.to_string())??;
+    // Fixed pipeline: the ablation runs showed the full chain (upscale,
+    // enhance, invert, sort) beats every subset, and binarize only suits
+    // clean documents, so it stays off.
+    let text = tauri::async_runtime::spawn_blocking(move || {
+        crate::ocr::ocr_png_with(&png, &crate::ocr::OcrOptions::default())
+    })
+    .await
+    .map_err(|e| e.to_string())??;
     {
         let mut clipboard = Clipboard::new().map_err(|e| e.to_string())?;
         clipboard.set_text(text.clone()).map_err(|e| e.to_string())?;

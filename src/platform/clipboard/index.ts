@@ -25,6 +25,12 @@ export interface ClipPreview {
   height: number;
 }
 
+export interface ClipPreview {
+  src: string;
+  width: number;
+  height: number;
+}
+
 interface ClipboardSource {
   get(): ClipItem[];
   /** Large image preview (images and copied image files). */
