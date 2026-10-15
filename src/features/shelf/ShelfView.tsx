@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowSquareOut, Check, ClipboardText, Copy, File, FileAudio, FileText, FileVideo, FolderOpen, ImageSquare, Table, Trash, Tray, X, type Icon } from "@phosphor-icons/react";
+import { ArrowSquareOut, Check, ClipboardText, Copy, DeviceMobile, File, FileAudio, FileText, FileVideo, FolderOpen, ImageSquare, Table, Trash, Tray, X, type Icon } from "@phosphor-icons/react";
 import { fade, springs } from "../../design/motion";
 import { createStore } from "../../lib/store";
 import { formatBytes } from "../../lib/format";
 import { drop, pasteFiles, takeDropped, usePasteFiles } from "../../platform/drop";
 import { HeaderActions, HeaderButton } from "../../notch/header";
-import { copyFiles, filePreview, openFile, probeFiles, revealFile, type DroppedFile, type FileKind } from "../../platform/services";
+import { copyFiles, filePreview, openFile, phone, probeFiles, revealFile, type DroppedFile, type FileKind, type PhoneShare } from "../../platform/services";
 import { t } from "../../i18n";
 
 /*
@@ -31,7 +31,13 @@ export function ShelfView() {
   const { dragging, dropped } = drop.use();
   const [copied, setCopied] = useState<string | null>(null);
   const [nothing, setNothing] = useState(false);
+  const [share, setShare] = useState<PhoneShare | null>(null);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareFail, setShareFail] = useState(false);
   usePasteFiles(() => flash(setNothing));
+
+  // A running share dies with the tool (plus its own 10-minute cap).
+  useEffect(() => () => void phone.stop(), []);
 
   useEffect(() => {
     const paths = takeDropped();
@@ -49,6 +55,24 @@ export function ShelfView() {
     await copyFiles(paths);
     setCopied(key);
     setTimeout(() => setCopied((c) => (c === key ? null : c)), 1200);
+  };
+
+  const send = async () => {
+    if (shareBusy || items.length === 0) return;
+    setShareBusy(true);
+    setShareFail(false);
+    try {
+      setShare(await phone.start(items.map((i) => i.path)));
+    } catch {
+      setShareFail(true);
+    } finally {
+      setShareBusy(false);
+    }
+  };
+
+  const unshare = () => {
+    setShare(null);
+    void phone.stop();
   };
 
   if (items.length === 0) {
@@ -75,6 +99,9 @@ export function ShelfView() {
         <span className="tabular mr-1 text-caption text-label-3">
           {items.length} {items.length === 1 ? t("Datei") : t("Dateien")}
         </span>
+        <HeaderButton label={t("An Handy senden")} onClick={() => void send()} disabled={shareBusy}>
+          <DeviceMobile size={14} weight="bold" />
+        </HeaderButton>
         <HeaderButton label={copied === "all" ? t("Kopiert") : t("Alle kopieren")} onClick={() => void copyAll(items.map((i) => i.path), "all")}>
           {copied === "all" ? <Check size={14} weight="bold" /> : <Copy size={14} weight="bold" />}
         </HeaderButton>
@@ -82,6 +109,37 @@ export function ShelfView() {
           <Trash size={14} weight="bold" />
         </HeaderButton>
       </HeaderActions>
+      <AnimatePresence initial={false}>
+        {(share || shareFail) && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={fade}
+            className="overflow-hidden"
+          >
+            {share ? (
+              <div className="mb-2 flex items-center gap-3 rounded-[14px] bg-fill-1 px-3 py-2">
+                <img src={share.qr} alt="" draggable={false} className="size-[72px] shrink-0 rounded-[8px] bg-white p-1" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-footnote font-medium text-label">{t("Code scannen")}</div>
+                  <div className="tabular truncate text-caption text-label-3">{share.url}</div>
+                  <div className="text-caption text-label-3">
+                    {share.files} {share.files === 1 ? t("Datei") : t("Dateien")} · {t("Nur im gleichen WLAN – endet automatisch")}
+                  </div>
+                </div>
+                <HeaderButton label={t("Freigabe beenden")} onClick={unshare}>
+                  <X size={13} weight="bold" />
+                </HeaderButton>
+              </div>
+            ) : (
+              <div className="mb-2 rounded-[14px] bg-fill-1 px-3 py-2 text-center text-caption text-label-3">
+                {t("Nur in der App verfügbar")}
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div className="flex min-h-0 flex-1 gap-2 overflow-x-auto [scrollbar-width:none]">
         <AnimatePresence initial={false} mode="popLayout">
           {items.map((item) => (

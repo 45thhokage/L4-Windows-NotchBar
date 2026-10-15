@@ -7,6 +7,7 @@ import {
   Cpu,
   Gauge,
   GearSix,
+  Globe,
   SquaresFour,
   MusicNotesSimple,
   NotePencil,
@@ -22,6 +23,7 @@ import { DiscordLogo } from "../ui/brands";
 import { OverviewView } from "../features/overview/OverviewView";
 import { NowPlayingView } from "../features/now-playing/NowPlayingView";
 import { TimerView } from "../features/timer/TimerView";
+import { WorldClockView } from "../features/worldclock/WorldClockView";
 import { TodosView } from "../features/todos/TodosView";
 import { NotesView } from "../features/notes/NotesView";
 import { ClipboardView } from "../features/clipboard/ClipboardView";
@@ -58,6 +60,7 @@ export const tabs: NotchTab[] = [
   { id: "overview", label: "Übersicht", icon: SquaresFour, size: { w: 520, h: 302 }, View: OverviewView },
   { id: "media", label: "Wiedergabe", icon: MusicNotesSimple, size: { w: 520, h: 232 }, View: NowPlayingView },
   { id: "timer", label: "Timer", icon: Timer, size: { w: 520, h: 192 }, View: TimerView },
+  { id: "worldclock", label: "Weltuhr", icon: Globe, size: { w: 520, h: 300 }, View: WorldClockView },
   { id: "todos", label: "To-Dos", icon: CheckCircle, size: { w: 520, h: 276 }, View: TodosView },
   { id: "notes", label: "Notiz", icon: NotePencil, size: { w: 520, h: 260 }, View: NotesView },
   { id: "clipboard", label: "Zwischenablage", icon: ClipboardText, size: { w: 600, h: 236 }, View: ClipboardView },

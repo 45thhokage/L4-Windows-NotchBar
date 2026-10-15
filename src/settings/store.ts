@@ -41,6 +41,8 @@ export interface Settings {
     /** Idle notch size in CSS px (Idle Appearance); the shape morphs there live. */
     idleW: number;
     idleH: number;
+    /** Always-on hardware strip in the closed notch: FPS, CPU, GPU, RAM, net, clock. */
+    stats: boolean;
   };
   /** Gaming mode: FPS + load in the closed notch: off, only in fullscreen, or always. */
   gaming: { mode: "off" | "fullscreen" | "on" };
@@ -49,6 +51,8 @@ export interface Settings {
   /** Discord call in the notch (local RPC, on = Discord tool enabled). The client secret is stored with the secrets. */
   discord: { clientId: string };
   alarm: { sound: AlarmSound; volume: number; duration: AlarmDuration };
+  /** World clock zones (IANA names); Cupertino is the Apple-style default. */
+  worldclock: { zones: string[] };
   language: "de" | "en";
   /** Temperature and clock format; picked from the Windows region on first start. */
   units: { temp: "c" | "f"; clock: "24" | "12" };
@@ -87,6 +91,7 @@ export const TOOL_IDS = [
   "overview",
   "media",
   "timer",
+  "worldclock",
   "todos",
   "notes",
   "clipboard",
@@ -120,11 +125,12 @@ const defaults: Settings = {
     },
   },
   weather: null,
-  display: { visibility: "always", monitor: null, offset: 0, focusStyle: "dim", idleStyle: "notch", idleW: 188, idleH: 30 },
+  display: { visibility: "always", monitor: null, offset: 0, focusStyle: "dim", idleStyle: "notch", idleW: 188, idleH: 30, stats: false },
   gaming: { mode: "off" },
   privacyDots: false,
   discord: { clientId: "" },
   alarm: { sound: "chime", volume: 0.7, duration: 5 },
+  worldclock: { zones: ["America/Los_Angeles"] },
   language: "en",
   units: regionUnits(),
   presentation: { manual: false, auto: true },
@@ -194,6 +200,7 @@ settings.set((s) => {
     gaming: { ...defaults.gaming, ...s.gaming },
     discord: { ...defaults.discord, ...s.discord },
     alarm: { ...defaults.alarm, ...s.alarm },
+    worldclock: { ...defaults.worldclock, ...s.worldclock },
     units: { ...defaults.units, ...s.units },
     presentation: { ...defaults.presentation, ...s.presentation },
     updates: { ...defaults.updates, ...s.updates },

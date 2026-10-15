@@ -571,8 +571,10 @@ function Display() {
           ]}
         />
       </Row>
-      {fpsError === "no-admin" && <FpsUnlockRow />}
-      {fpsError === "relogin" && (
+      <Row label={t("Kennzahlen")} hint={t("FPS, CPU, GPU, RAM, Netz und Uhr in der geschlossenen Notch – fragt einmal pro Sekunde ab")}>
+        <Switch label={t("Kennzahlen")} checked={d.stats} onChange={(stats) => updateSettings((cur) => ({ display: { ...cur.display, stats } }))} />
+      </Row>
+      {fpsError === "no-admin" && <FpsUnlockRow />}      {fpsError === "relogin" && (
         <Row label={t("FPS freischalten")} hint={t("Fertig – einmal ab- und wieder anmelden, dann laufen die FPS")}>
           <SignOut size={18} weight="bold" className="text-orange" />
         </Row>
