@@ -8,7 +8,10 @@ export default defineConfig({
   clearScreen: false,
   server: {
     host: "127.0.0.1",
-    port: 5173,
+    // 5173 sits inside a Hyper-V/WSL excluded port range on this machine
+    // (EACCES on listen); 1420 is outside all exclusions. Keep in sync with
+    // src-tauri/tauri.conf.json devUrl.
+    port: 1420,
     strictPort: true,
     watch: { ignored: ["**/src-tauri/**"] },
   },
