@@ -72,6 +72,7 @@ struct Entry {
     id: u64,
     content: Content,
     item: ClipItem,
+    pinned: bool,
 }
 
 /// What the frontend sees, without the full data.
@@ -86,6 +87,8 @@ pub struct ClipItem {
     thumbnail: Option<String>,
     /// Files: how many entries are folders (for the icon).
     folders: usize,
+    /// Pinned entries sort first and survive eviction.
+    pinned: bool,
     /// Unix time in ms.
     copied_at: u64,
 }
@@ -171,6 +174,23 @@ pub fn clipboard_delete(id: u64, app: AppHandle, state: State<'_, ClipboardState
 pub fn clipboard_clear(app: AppHandle, state: State<'_, ClipboardState>) {
     state.entries.lock().unwrap().clear();
     emit(&app, &state);
+}
+
+/// Pin or unpin an entry. Pinned entries sort first and are never evicted.
+#[tauri::command]
+pub fn clipboard_pin(id: u64, app: AppHandle, state: State<'_, ClipboardState>) -> Result<bool, String> {
+    let pinned = {
+        let mut entries = state.entries.lock().unwrap();
+        {
+            let entry = entries.iter_mut().find(|e| e.id == id).ok_or("Eintrag nicht gefunden")?;
+            entry.pinned = !entry.pinned;
+            entry.item.pinned = entry.pinned;
+        }
+        entries.sort_by_key(|e| !e.pinned);
+        entries.iter().find(|e| e.id == id).map(|e| e.pinned).unwrap_or(false)
+    };
+    emit(&app, &state);
+    Ok(pinned)
 }
 
 /// Large preview of an image entry (copied image or first image file).
@@ -418,10 +438,15 @@ fn add(state: &ClipboardState, content: Content) {
         *next
     };
     let Some(item) = describe(id, &content) else { return };
-    entries.insert(0, Entry { id, content, item });
+    entries.insert(0, Entry { id, content, item, pinned: false });
+    // Pinned first (stable: recency within each group survives).
+    entries.sort_by_key(|e| !e.pinned);
 
     let mut images = 0;
     entries.retain(|e| {
+        if e.pinned {
+            return true;
+        }
         if matches!(e.content, Content::Image(_)) {
             images += 1;
             images <= MAX_IMAGES
@@ -429,7 +454,8 @@ fn add(state: &ClipboardState, content: Content) {
             true
         }
     });
-    entries.truncate(MAX_ITEMS);
+    let pinned = entries.iter().filter(|e| e.pinned).count();
+    entries.truncate(pinned + MAX_ITEMS);
 }
 
 fn describe(id: u64, content: &Content) -> Option<ClipItem> {
@@ -443,6 +469,7 @@ fn describe(id: u64, content: &Content) -> Option<ClipItem> {
                 text: trimmed.chars().take(PREVIEW_CHARS).collect(),
                 thumbnail: None,
                 folders: 0,
+                pinned: false,
                 copied_at,
             }
         }
@@ -453,6 +480,7 @@ fn describe(id: u64, content: &Content) -> Option<ClipItem> {
                 text: format!("{} × {}", img.width, img.height),
                 thumbnail: Some(img.thumbnail.clone()),
                 folders: 0,
+                pinned: false,
                 copied_at,
             }
         }
@@ -464,7 +492,7 @@ fn describe(id: u64, content: &Content) -> Option<ClipItem> {
             // First image file as preview, so copied photos look like photos.
             let thumbnail = files.iter().find(|p| is_image_file(p)).and_then(|p| file_thumbnail(p));
             let folders = files.iter().filter(|p| p.is_dir()).count();
-            ClipItem { id, kind: "files", text: names.join("\n"), thumbnail, folders, copied_at }
+            ClipItem { id, kind: "files", text: names.join("\n"), thumbnail, folders, pinned: false, copied_at }
         }
     })
 }

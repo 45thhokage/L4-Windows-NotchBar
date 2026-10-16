@@ -10,6 +10,8 @@ export interface ClipItem {
   /** Text, link, "1920 × 1080" for images, file names (one per line) for files. */
   text: string;
   thumbnail: string | null;
+  /** Pinned entries sort first and survive eviction (absent in old mocks). */
+  pinned?: boolean;
   /** Files: how many entries are folders. */
   folders: number;
   /** Unix time in ms. */
@@ -39,6 +41,8 @@ interface ClipboardSource {
   ocr(id: number): Promise<string>;
   subscribe(listener: () => void): () => void;
   copy(id: number): Promise<void>;
+  /** Toggle pin; pinned entries sort first. */
+  pin(id: number): Promise<void>;
   remove(id: number): void;
   clear(): void;
   /** What gets recorded (from the enabled tools); drops entries the mode doesn't keep. */
@@ -62,6 +66,7 @@ function createNative(): ClipboardSource {
       return () => listeners.delete(listener);
     },
     copy: (id) => invoke("clipboard_copy", { id }),
+    pin: (id) => invoke("clipboard_pin", { id }),
     preview: (id) => invoke<ClipPreview | null>("clipboard_preview", { id }),
     ocr: (id) => invoke<string>("clipboard_ocr", { id }),
     remove: (id) => void invoke("clipboard_delete", { id }),
@@ -102,6 +107,12 @@ function createMock(): ClipboardSource {
       const item = items.find((i) => i.id === id);
       const [w, h] = item?.text.split(" × ").map(Number) ?? [];
       return item?.thumbnail && w ? { src: item.thumbnail, width: w, height: h } : null;
+    },
+    async pin(id) {
+      const item = items.find((i) => i.id === id);
+      if (!item) return;
+      item.pinned = !item.pinned;
+      set([...items.filter((i) => i.pinned), ...items.filter((i) => !i.pinned)]);
     },
     async ocr(id) {
       const text = `Erkannter Beispieltext aus Bild ${id}`;

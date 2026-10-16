@@ -1,19 +1,22 @@
 //! Overview: system volume, brightness, Windows focus, lock and sleep.
 //!
 //! - Volume: default output device via `IAudioEndpointVolume` (same as the taskbar slider).
-//! - Brightness: power scheme `VIDEO_CURRENT_BRIGHTNESS` (what the Settings slider
-//!   changes on laptops). AC and DC are written together so the slider sticks on
-//!   battery; read follows the current power source.
 //! - Focus: Windows 11 focus session (`FocusSessionManager`, also turns on Do Not Disturb).
 //!   Without that API (older builds), Do Not Disturb is set directly through the WNF state
 //!   `WNF_SHEL_QUIETHOURS_ACTIVE_PROFILE_CHANGED`, which is what the toggle in the
 //!   notification center does.
 
+use windows::Win32::Devices::Display::{
+    DestroyPhysicalMonitors, GetNumberOfPhysicalMonitorsFromHMONITOR, GetPhysicalMonitorsFromHMONITOR, GetVCPFeatureAndVCPFeatureReply,
+    MC_VCP_CODE_TYPE, SetVCPFeature, PHYSICAL_MONITOR,
+};
+use windows::Win32::Foundation::{HANDLE, HLOCAL, LPARAM, RECT, LocalFree};
+use windows::Win32::Graphics::Gdi::{EnumDisplayMonitors, HDC, HMONITOR};
+
 use std::ffi::c_void;
 
 use serde::Serialize;
 use windows::UI::Shell::FocusSessionManager;
-use windows::Win32::Foundation::{HLOCAL, LocalFree};
 use windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
 use windows::Win32::Media::Audio::{eConsole, eRender, IMMDeviceEnumerator, MMDeviceEnumerator};
 use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED};
@@ -22,7 +25,7 @@ use windows::Win32::System::Power::{
     PowerWriteACValueIndex, PowerWriteDCValueIndex, SetSuspendState, SYSTEM_POWER_STATUS,
 };
 use windows::Win32::System::Shutdown::LockWorkStation;
-use windows::core::GUID;
+use windows::core::{BOOL, GUID};
 
 #[derive(Serialize)]
 pub struct Volume {
@@ -178,6 +181,10 @@ fn on_ac() -> bool {
 }
 
 fn read_brightness() -> Result<Brightness, String> {
+    // Desktop panels ignore the power scheme, so DDC/CI wins when present.
+    if let Some(level) = ddc_levels().into_iter().next() {
+        return Ok(Brightness { level });
+    }
     unsafe {
         let scheme = active_scheme()?;
         let mut index = 0u32;
@@ -202,8 +209,20 @@ pub async fn brightness_get() -> Result<Brightness, String> {
 #[tauri::command]
 pub async fn brightness_set(level: f32) -> Result<Brightness, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        let level = level.clamp(0.0, 1.0);
+        // DDC/CI first: every capable external panel follows.
+        let mut ddc_ok = false;
+        with_physical_monitors(|h| {
+            if ddc_set(h, level) {
+                ddc_ok = true;
+            }
+        });
+        if ddc_ok {
+            return read_brightness();
+        }
+        // No DDC/CI panel: internal display via the power scheme.
         let scheme = active_scheme()?;
-        let index = (level.clamp(0.0, 1.0) * 100.0).round() as u32;
+        let index = (level * 100.0).round() as u32;
         unsafe {
             let rc = PowerWriteACValueIndex(None, &scheme, Some(&VIDEO_SUBGROUP), Some(&VIDEO_BRIGHTNESS), index);
             if rc.0 != 0 {
@@ -222,7 +241,72 @@ pub async fn brightness_set(level: f32) -> Result<Brightness, String> {
     .map_err(|e| e.to_string())?
 }
 
-// ── Lock / Sleep ────────────────────────────────────────────────────────────
+/// VCP feature code for luminance (brightness) over DDC/CI.
+const VCP_BRIGHTNESS: u8 = 0x10;
+
+unsafe extern "system" fn collect_monitor(hmon: HMONITOR, _hdc: HDC, _rect: *mut RECT, data: LPARAM) -> BOOL {
+    let out = &mut *(data.0 as *mut Vec<HMONITOR>);
+    out.push(hmon);
+    BOOL::from(true)
+}
+
+/// Every physical monitor handle on the system (freed before returning).
+fn with_physical_monitors(mut f: impl FnMut(HANDLE)) {
+    let mut logical: Vec<HMONITOR> = Vec::new();
+    unsafe {
+        let _ = EnumDisplayMonitors(None, None, Some(collect_monitor), LPARAM(&mut logical as *mut Vec<HMONITOR> as isize));
+        for hmon in logical {
+            let mut count = 0u32;
+            if GetNumberOfPhysicalMonitorsFromHMONITOR(hmon, &mut count).is_err() || count == 0 {
+                continue;
+            }
+            let mut physical = vec![PHYSICAL_MONITOR::default(); count as usize];
+            if GetPhysicalMonitorsFromHMONITOR(hmon, &mut physical).is_err() {
+                continue;
+            }
+            for pm in &physical {
+                f(pm.hPhysicalMonitor);
+            }
+            let _ = DestroyPhysicalMonitors(&physical);
+        }
+    }
+}
+
+/// (current, max) VCP brightness of one physical monitor, if it supports DDC/CI.
+fn ddc_read(h: HANDLE) -> Option<(u32, u32)> {
+    unsafe {
+        let mut kind = MC_VCP_CODE_TYPE::default();
+        let (mut current, mut max) = (0u32, 0u32);
+        if GetVCPFeatureAndVCPFeatureReply(h, VCP_BRIGHTNESS, Some(&mut kind), &mut current, Some(&mut max)) != 0 && max > 0 {
+            Some((current.min(max), max))
+        } else {
+            None
+        }
+    }
+}
+
+fn ddc_set(h: HANDLE, level: f32) -> bool {
+    unsafe {
+        let mut kind = MC_VCP_CODE_TYPE::default();
+        let (mut current, mut max) = (0u32, 0u32);
+        if GetVCPFeatureAndVCPFeatureReply(h, VCP_BRIGHTNESS, Some(&mut kind), &mut current, Some(&mut max)) == 0 || max == 0 {
+            return false;
+        }
+        let value = (level.clamp(0.0, 1.0) * max as f32).round() as u32;
+        SetVCPFeature(h, VCP_BRIGHTNESS, value) != 0
+    }
+}
+
+/// Brightness level (0..1) of every DDC/CI-capable external panel.
+fn ddc_levels() -> Vec<f32> {
+    let mut levels = Vec::new();
+    with_physical_monitors(|h| {
+        if let Some((current, max)) = ddc_read(h) {
+            levels.push(current as f32 / max as f32);
+        }
+    });
+    levels
+}
 
 #[tauri::command]
 pub async fn lock_workstation() -> Result<(), String> {

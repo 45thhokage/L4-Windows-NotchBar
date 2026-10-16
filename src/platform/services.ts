@@ -208,6 +208,11 @@ export interface SystemStats {
   gpuMemTotal: number;
   /** ms; null = no reply. */
   ping: number | null;
+  /** Celsius; absent until a safe sensor source exists. */
+  cpuTemp?: number | null;
+  gpuTemp?: number | null;
+  /** Downlink bytes per second; null until the second shown poll. */
+  downBps: number | null;
 }
 
 let mock = { cpu: 18, gpu: 32, ping: 14 };
@@ -227,6 +232,9 @@ export function fetchSystem(full: boolean): Promise<SystemStats> {
     gpuMemUsed: full ? 2.9 * gb + (mock.gpu / 100) * 3 * gb : 0,
     gpuMemTotal: 12 * gb,
     ping: full ? Math.round(mock.ping) : null,
+    cpuTemp: full ? 62 + Math.random() * 4 : null,
+    gpuTemp: full ? 58 + Math.random() * 4 : null,
+    downBps: full ? 6_100_000 + Math.round(Math.random() * 900_000) : null,
   });
 }
 
@@ -299,6 +307,20 @@ export function openFile(path: string): Promise<void> {
 export function copyFiles(paths: string[]): Promise<void> {
   return isNative ? invoke("copy_files", { paths }) : Promise.resolve();
 }
+
+/** Send to phone: shelf files over the local network, picked up by QR code. */
+export interface PhoneShare {
+  url: string;
+  /** QR code of the URL as a PNG data URL. */
+  qr: string;
+  files: number;
+}
+
+export const phone = {
+  start: (paths: string[]): Promise<PhoneShare> =>
+    isNative ? invoke<PhoneShare>("phone_start", { paths }) : Promise.reject(new Error("web")),
+  stop: (): Promise<void> => (isNative ? invoke("phone_stop") : Promise.resolve()),
+};
 
 export function filePreview(path: string): Promise<string | null> {
   return isNative ? invoke<string | null>("file_preview", { path }) : Promise.resolve(null);

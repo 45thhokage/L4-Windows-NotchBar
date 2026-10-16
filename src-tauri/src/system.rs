@@ -1,4 +1,5 @@
-//! System stats for the Hardware tool: CPU, RAM, GPU (load + VRAM), ping.
+//! System stats for the Hardware tool: CPU, RAM, GPU (load + VRAM), ping and
+//! downlink rate (the last only while shown).
 //! Polled ~1×/s while shown (Hardware tool open, gaming mode); in the background every
 //! 3 s with CPU and RAM only (`full = false`).
 //!
@@ -13,7 +14,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use sysinfo::System;
+use sysinfo::{Networks, System};
 use tauri::State;
 use windows::core::w;
 use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1, DXGI_ADAPTER_FLAG_SOFTWARE};
@@ -39,6 +40,9 @@ struct Probe {
     gpu_name: Option<String>,
     gpu_total: u64,
     ping: Arc<Ping>,
+    nets: Networks,
+    last_rx: u64,
+    last_rx_at: Option<Instant>,
 }
 
 struct Ping {
@@ -62,7 +66,19 @@ impl Default for SystemState {
         let (gpu_name, gpu_total) = adapter().unzip();
         let ping = Arc::new(Ping { ms: AtomicU64::new(NO_PING), wanted_at: Mutex::new(Instant::now() - PING_IDLE) });
         spawn_ping(ping.clone());
-        Self(Mutex::new(Probe { sys: System::new(), gpu: Gpu::open(), gpu_name, gpu_total: gpu_total.flatten().unwrap_or(0), ping }))
+        Self(Mutex::new(Probe {
+            sys: System::new(),
+            gpu: Gpu::open(),
+            gpu_name,
+            gpu_total: gpu_total.flatten().unwrap_or(0),
+            ping,
+            // No sensor init here: sysinfo Components corrupt the heap on some
+            // machines at startup (seen on Win10 19041), so temperatures stay
+            // unsupported until a safer source exists.
+            nets: Networks::new_with_refreshed_list(),
+            last_rx: 0,
+            last_rx_at: None,
+        }))
     }
 }
 
@@ -80,6 +96,8 @@ pub struct Stats {
     gpu_mem_total: u64,
     /// Milliseconds; None = no reply.
     ping: Option<u64>,
+    /// Downlink bytes per second; None until the second shown poll.
+    down_bps: Option<u64>,
 }
 
 #[tauri::command]
@@ -98,6 +116,8 @@ pub fn system_stats(full: bool, state: State<'_, SystemState>) -> Stats {
 
     let (gpu, gpu_mem_used) = if full { p.gpu.as_ref().map(Gpu::read).unwrap_or((None, 0)) } else { (None, 0) };
     let ping = if full { p.ping.ms.load(Ordering::Relaxed) } else { NO_PING };
+    // Downlink only while shown: the interface walk costs a scan each poll.
+    let down_bps = if full { read_downlink(&mut p) } else { None };
     Stats {
         cpu: p.sys.global_cpu_usage(),
         cpu_name: p.sys.cpus().first().map(|c| clean_name(c.brand())).unwrap_or_default(),
@@ -108,7 +128,30 @@ pub fn system_stats(full: bool, state: State<'_, SystemState>) -> Stats {
         gpu_mem_used,
         gpu_mem_total: p.gpu_total,
         ping: (ping != NO_PING).then_some(ping),
+        down_bps,
     }
+}
+
+/// Downlink rate from interface byte counters. Best effort; the first shown
+/// poll only arms the baseline and yields None.
+fn read_downlink(p: &mut Probe) -> Option<u64> {
+    p.nets.refresh(false);
+    let rx: u64 = p.nets.list().values().map(|n| n.total_received()).sum();
+    let now = Instant::now();
+    let down_bps = match p.last_rx_at {
+        Some(at) => {
+            let dt = now.duration_since(at).as_secs_f64();
+            if dt > 0.0 && rx >= p.last_rx {
+                Some(((rx - p.last_rx) as f64 / dt) as u64)
+            } else {
+                None
+            }
+        }
+        None => None,
+    };
+    p.last_rx = rx;
+    p.last_rx_at = Some(now);
+    down_bps
 }
 
 impl Gpu {

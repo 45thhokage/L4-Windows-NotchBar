@@ -17,6 +17,7 @@ import {
   Folder,
   ImageSquare,
   LinkSimple,
+  PushPin,
   Scan,
   TextAa,
   Trash,
@@ -166,9 +167,19 @@ export function ClipboardView() {
                 onClick={() => (item.thumbnail && !hidden ? setPreviewId((p) => (p === item.id ? null : item.id)) : void copy(item.id))}
               />
               <div className="absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                <CardButton
+                  label={item.pinned ? t("Lösen") : t("Anpinnen")}
+                  icon={PushPin}
+                  onClick={() => void clipboard.pin(item.id)}
+                />
                 {item.thumbnail && !hidden && <CardButton label={t("Kopieren")} icon={Copy} onClick={() => void copy(item.id)} />}
                 <CardButton label={t("Entfernen")} icon={X} onClick={() => clipboard.remove(item.id)} />
               </div>
+              {item.pinned && (
+                <div className="absolute top-2 left-2 flex size-5 items-center justify-center rounded-full bg-fill-3 text-label backdrop-blur-md">
+                  <PushPin size={10} weight="fill" />
+                </div>
+              )}
             </motion.div>
           ))}
         </AnimatePresence>

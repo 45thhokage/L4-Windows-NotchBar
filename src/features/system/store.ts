@@ -65,7 +65,7 @@ function poll() {
 
 function wanted(): boolean {
   const s = settings.get();
-  return s.tools.some((x) => x.id === "system" && x.enabled) || s.gaming.mode !== "off";
+  return s.tools.some((x) => x.id === "system" && x.enabled) || s.gaming.mode !== "off" || s.display.stats;
 }
 
 function apply() {

@@ -14,6 +14,7 @@ mod media;
 mod memory;
 mod mixer;
 mod ocr;
+mod phone;
 mod privacy;
 pub mod secrets;
 mod system;
@@ -61,7 +62,7 @@ pub fn run() {
         )
         .manage(hit_test::HitState::default())
         .manage(media::MediaState::default())
-        .manage(mixer::MixerState::default())
+        .manage(phone::PhoneState::default())        .manage(mixer::MixerState::default())
         .manage(clipboard::ClipboardState::default())
         .manage(FocusState::default())
         .manage(TrayItems::default())
@@ -86,6 +87,7 @@ pub fn run() {
             clipboard::clipboard_delete,
             clipboard::clipboard_clear,
             clipboard::clipboard_preview,
+            clipboard::clipboard_pin,
             clipboard::clipboard_paste_files,
             clipboard::clipboard_ocr,
             keyboard_focus,
@@ -104,6 +106,8 @@ pub fn run() {
             convert::open_path,
             convert::copy_files,
             convert::file_preview,
+            phone::phone_start,
+            phone::phone_stop,
             display::display_monitors,
             display::display_apply,
             fps::gaming_fps,
