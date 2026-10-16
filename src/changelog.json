@@ -1,5 +1,31 @@
 [
   {
+    "version": "1.7.2",
+    "date": "2026-10-16",
+    "items": [
+      {
+        "de": "Neue Weltuhr neben dem Timer - Städte hinzufügen und entfernen",
+        "en": "New world clock next to the timer - add and remove cities"
+      },
+      {
+        "de": "Zwischenablage-Einträge lassen sich anpinnen und bleiben oben",
+        "en": "Clipboard entries can be pinned and stay on top"
+      },
+      {
+        "de": "Helligkeits-Regler steuert jetzt auch externe Monitore",
+        "en": "Brightness slider now controls external monitors too"
+      },
+      {
+        "de": "Ablage per QR-Code ans Handy senden - ganz ohne Konto",
+        "en": "Send shelf files to your phone via QR code - no account needed"
+      },
+      {
+        "de": "Kennzahlen in der geschlossenen Notch: FPS, CPU, GPU, RAM, Netz und Uhr",
+        "en": "Stats in the closed notch: FPS, CPU, GPU, RAM, net and clock"
+      }
+    ]
+  },
+  {
     "version": "1.7.1",
     "date": "2026-10-16",
     "items": [
