@@ -1,5 +1,19 @@
 [
   {
+    "version": "1.7.1",
+    "date": "2026-10-16",
+    "items": [
+      {
+        "de": "Texterkennung nutzt jetzt zuerst das englische Modell - erkennt englische Screenshots besser",
+        "en": "Text recognition now tries the English model first - reads English screenshots better"
+      },
+      {
+        "de": "Mausrad über seitlich scrollbaren Karten (z. B. Zwischenablage) wechselt keine Tools mehr",
+        "en": "Mouse wheel over sideways-scrolling cards (e.g. clipboard) no longer flips tools"
+      }
+    ]
+  },
+  {
     "version": "1.7.0",
     "date": "2026-10-11",
     "items": [

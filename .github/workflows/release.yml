@@ -85,3 +85,14 @@ jobs:
 
             ### Changes
             ${{ needs.check.outputs.notes }}
+      - name: Portable zip
+        # Same binary as the installer, zipped: unzip anywhere and run it.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = (Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json).version
+          Copy-Item src-tauri/target/release/notch.exe L4-Notchbar.exe
+          $zip = "L4-Notchbar_${version}_x64_portable.zip"
+          Compress-Archive -Path L4-Notchbar.exe -DestinationPath $zip -Force
+          Remove-Item L4-Notchbar.exe
+          gh release upload "v$version" $zip --repo "$env:GITHUB_REPOSITORY"
