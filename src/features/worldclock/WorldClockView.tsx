@@ -1,47 +1,17 @@
 import { useEffect, useState } from "react";
-import { Clock, Plus, X } from "@phosphor-icons/react";
+import { Clock, MagnifyingGlass, Plus, X } from "@phosphor-icons/react";
 import { HeaderActions } from "../../notch/header";
 import { settings, updateSettings } from "../../settings/store";
 import { locale, t } from "../../i18n";
 import { Button, Empty, Select } from "../../ui/controls";
+import { APPLE_CITIES, cityFor, searchZones } from "./zones";
 
 /*
  * World clock: one row per zone, live time plus GMT offset. Zones are added
- * from an Apple-style city list and any row (added or default) can be removed.
+ * from the Apple-style city list, or found through the search over every
+ * country; any row (added or default) can be removed.
  * Pure Intl API, no backend: `timeZone` does all the work.
  */
-
-/** Apple-style city list (city label + IANA zone), ASCII labels on purpose. */
-export const APPLE_CITIES: { city: string; zone: string }[] = [
-  { city: "Cupertino", zone: "America/Los_Angeles" },
-  { city: "New York", zone: "America/New_York" },
-  { city: "Chicago", zone: "America/Chicago" },
-  { city: "Denver", zone: "America/Denver" },
-  { city: "Anchorage", zone: "America/Anchorage" },
-  { city: "Honolulu", zone: "Pacific/Honolulu" },
-  { city: "Toronto", zone: "America/Toronto" },
-  { city: "Mexico City", zone: "America/Mexico_City" },
-  { city: "Sao Paulo", zone: "America/Sao_Paulo" },
-  { city: "London", zone: "Europe/London" },
-  { city: "Paris", zone: "Europe/Paris" },
-  { city: "Berlin", zone: "Europe/Berlin" },
-  { city: "Athens", zone: "Europe/Athens" },
-  { city: "Moscow", zone: "Europe/Moscow" },
-  { city: "Dubai", zone: "Asia/Dubai" },
-  { city: "Mumbai", zone: "Asia/Kolkata" },
-  { city: "Bangkok", zone: "Asia/Bangkok" },
-  { city: "Singapore", zone: "Asia/Singapore" },
-  { city: "Hong Kong", zone: "Asia/Hong_Kong" },
-  { city: "Shanghai", zone: "Asia/Shanghai" },
-  { city: "Tokyo", zone: "Asia/Tokyo" },
-  { city: "Seoul", zone: "Asia/Seoul" },
-  { city: "Sydney", zone: "Australia/Sydney" },
-  { city: "Auckland", zone: "Pacific/Auckland" },
-];
-
-export function cityFor(zone: string): string {
-  return APPLE_CITIES.find((c) => c.zone === zone)?.city ?? zone;
-}
 
 function useNow(interval: number): number {
   const [now, setNow] = useState(Date.now);
@@ -57,13 +27,18 @@ export function WorldClockView() {
   const clock = s.units.clock;
   const now = useNow(5000);
   const [pick, setPick] = useState("");
+  const [query, setQuery] = useState("");
   const list = s.worldclock.zones;
-  const left = APPLE_CITIES.filter((c) => !list.includes(c.zone));
+  const appleLeft = APPLE_CITIES.filter((c) => !list.includes(c.zone));
+  // Empty search: the familiar short list. Typed: every matching country.
+  const found = searchZones(query, list);
+  const searching = query.trim().length > 0;
 
   const add = () => {
     if (!pick) return;
     updateSettings((s) => ({ worldclock: { zones: [...s.worldclock.zones, pick] } }));
     setPick("");
+    setQuery("");
   };
   const remove = (zone: string) =>
     updateSettings((s) => ({ worldclock: { zones: s.worldclock.zones.filter((z) => z !== zone) } }));
@@ -100,12 +75,29 @@ export function WorldClockView() {
           ))}
         </div>
       )}
+      <div className="flex h-9 items-center gap-2 rounded-[12px] bg-fill-1 px-3">
+        <MagnifyingGlass size={14} weight="bold" className="shrink-0 text-label-3" />
+        <input
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setPick("");
+          }}
+          placeholder={t("Land oder Stadt suchen")}
+          className="min-w-0 flex-1 bg-transparent text-body text-label outline-none placeholder:text-label-4"
+        />
+      </div>
       <div className="flex items-center gap-1.5 pt-2">
         <Select
           width="w-44"
           value={pick}
           onChange={setPick}
-          options={[{ value: "", label: t("Stadt wählen") }, ...left.map((c) => ({ value: c.zone, label: c.city }))]}
+          options={[
+            { value: "", label: searching ? t("Treffer wählen") : t("Stadt wählen") },
+            ...(searching
+              ? found.map((c) => ({ value: c.zone, label: `${c.city}, ${c.country}` }))
+              : appleLeft.map((c) => ({ value: c.zone, label: c.city }))),
+          ]}
         />
         <Button disabled={!pick} onClick={add}>
           <span className="flex items-center gap-1">
