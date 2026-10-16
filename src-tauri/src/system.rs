@@ -1,5 +1,5 @@
-//! System stats for the Hardware tool: CPU, RAM, GPU (load + VRAM), ping,
-//! temperatures and downlink rate (the last two only while shown).
+//! System stats for the Hardware tool: CPU, RAM, GPU (load + VRAM), ping and
+//! downlink rate (the last only while shown).
 //! Polled ~1×/s while shown (Hardware tool open, gaming mode); in the background every
 //! 3 s with CPU and RAM only (`full = false`).
 //!
@@ -14,7 +14,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use sysinfo::{Components, Networks, System};
+use sysinfo::{Networks, System};
 use tauri::State;
 use windows::core::w;
 use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1, DXGI_ADAPTER_FLAG_SOFTWARE};
@@ -40,7 +40,6 @@ struct Probe {
     gpu_name: Option<String>,
     gpu_total: u64,
     ping: Arc<Ping>,
-    components: Components,
     nets: Networks,
     last_rx: u64,
     last_rx_at: Option<Instant>,
@@ -73,7 +72,9 @@ impl Default for SystemState {
             gpu_name,
             gpu_total: gpu_total.flatten().unwrap_or(0),
             ping,
-            components: Components::new_with_refreshed_list(),
+            // No sensor init here: sysinfo Components corrupt the heap on some
+            // machines at startup (seen on Win10 19041), so temperatures stay
+            // unsupported until a safer source exists.
             nets: Networks::new_with_refreshed_list(),
             last_rx: 0,
             last_rx_at: None,
@@ -95,9 +96,6 @@ pub struct Stats {
     gpu_mem_total: u64,
     /// Milliseconds; None = no reply.
     ping: Option<u64>,
-    /// Celsius; None = no sensor. Only measured while shown.
-    cpu_temp: Option<f32>,
-    gpu_temp: Option<f32>,
     /// Downlink bytes per second; None until the second shown poll.
     down_bps: Option<u64>,
 }
@@ -118,8 +116,8 @@ pub fn system_stats(full: bool, state: State<'_, SystemState>) -> Stats {
 
     let (gpu, gpu_mem_used) = if full { p.gpu.as_ref().map(Gpu::read).unwrap_or((None, 0)) } else { (None, 0) };
     let ping = if full { p.ping.ms.load(Ordering::Relaxed) } else { NO_PING };
-    // Temperatures and downlink only while shown: sensor and interface walks.
-    let (cpu_temp, gpu_temp, down_bps) = if full { read_extra(&mut p) } else { (None, None, None) };
+    // Downlink only while shown: the interface walk costs a scan each poll.
+    let down_bps = if full { read_downlink(&mut p) } else { None };
     Stats {
         cpu: p.sys.global_cpu_usage(),
         cpu_name: p.sys.cpus().first().map(|c| clean_name(c.brand())).unwrap_or_default(),
@@ -130,28 +128,13 @@ pub fn system_stats(full: bool, state: State<'_, SystemState>) -> Stats {
         gpu_mem_used,
         gpu_mem_total: p.gpu_total,
         ping: (ping != NO_PING).then_some(ping),
-        cpu_temp,
-        gpu_temp,
         down_bps,
     }
 }
 
-/// Sensor temperatures (first CPU-ish and GPU-ish labels) plus downlink rate
-/// from interface byte counters. Best effort: missing sensors yield None.
-fn read_extra(p: &mut Probe) -> (Option<f32>, Option<f32>, Option<u64>) {
-    p.components.refresh(false);
-    let mut cpu_temp = None;
-    let mut gpu_temp = None;
-    for c in p.components.list() {
-        let label = c.label().to_lowercase();
-        let temp = c.temperature();
-        if cpu_temp.is_none() && (label.contains("cpu") || label.contains("core") || label.contains("package")) {
-            cpu_temp = temp;
-        }
-        if gpu_temp.is_none() && (label.contains("gpu") || label.contains("nvidia") || label.contains("amdgpu")) {
-            gpu_temp = temp;
-        }
-    }
+/// Downlink rate from interface byte counters. Best effort; the first shown
+/// poll only arms the baseline and yields None.
+fn read_downlink(p: &mut Probe) -> Option<u64> {
     p.nets.refresh(false);
     let rx: u64 = p.nets.list().values().map(|n| n.total_received()).sum();
     let now = Instant::now();
@@ -168,7 +151,7 @@ fn read_extra(p: &mut Probe) -> (Option<f32>, Option<f32>, Option<u64>) {
     };
     p.last_rx = rx;
     p.last_rx_at = Some(now);
-    (cpu_temp, gpu_temp, down_bps)
+    down_bps
 }
 
 impl Gpu {

@@ -208,9 +208,9 @@ export interface SystemStats {
   gpuMemTotal: number;
   /** ms; null = no reply. */
   ping: number | null;
-  /** Celsius; null = no sensor. Only while shown. */
-  cpuTemp: number | null;
-  gpuTemp: number | null;
+  /** Celsius; absent until a safe sensor source exists. */
+  cpuTemp?: number | null;
+  gpuTemp?: number | null;
   /** Downlink bytes per second; null until the second shown poll. */
   downBps: number | null;
 }
